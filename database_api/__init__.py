@@ -3,6 +3,8 @@ from sqlalchemy import create_engine
 from contextlib import contextmanager
 from sqlalchemy.orm import sessionmaker
 
+from .alembic_migration_check import alembic_migration_check
+
 # Ignore error!
 from src.database.schema import Base
 
@@ -13,6 +15,7 @@ engine = None
 def set_database(url):
   global engine
   engine = create_engine(url, pool_pre_ping=True)
+  alembic_migration_check(engine, Session)
   Base.metadata.create_all(engine)
   return engine
 
