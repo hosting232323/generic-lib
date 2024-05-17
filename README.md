@@ -9,9 +9,9 @@ python -m venv venv
 
 .\venv\Scripts\activate
 
-pip install generic_lib-x.x.x.tar.gz
+pip install generic_lib-<version>.tar.gz
 
-setup_project
+setup_project <generic_api_key>
 ```
 
 ## Api

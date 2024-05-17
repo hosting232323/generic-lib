@@ -1,14 +1,16 @@
 import os
+import sys
 import requests
 
 
-url = 'https://genericbackend.replit.app/setup-project'
+def main():
+  response = requests.get('https://generic-be.replit.app/setup-project', headers={
+    'Authorization': sys.argv[1]
+  }).json()
+  if response['status'] == 'ko':
+    raise Exception(response['error'])
 
-
-def setup_project_(generic_api_key):
-  create_files_and_folders(requests.get(url, headers={
-    'Authorization': generic_api_key
-  }).json()['setup'], '.')
+  create_files_and_folders(response['setup'], '.')
   if not os.path.exists('.env'):
     print('you need to setup the file .env')
 
