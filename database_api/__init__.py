@@ -1,8 +1,10 @@
+import sys
 import traceback
 from sqlalchemy import create_engine
 from contextlib import contextmanager
 from sqlalchemy.orm import sessionmaker
 
+from .backup import data_export_, data_import_
 from .alembic_migration_check import alembic_migration_check
 
 
@@ -31,8 +33,8 @@ def Session():
 
 
 def data_export():
-  print('ciao')
+  data_export_(set_database(sys.argv[1]))
 
 
 def data_import():
-  print('ciao')
+  data_import_(set_database(sys.argv[1]), sys.argv[2])
