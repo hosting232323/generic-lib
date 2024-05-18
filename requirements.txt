@@ -3,3 +3,5 @@ alembic
 build
 requests
 flask
+schedule
+gitpython

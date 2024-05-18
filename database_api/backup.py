@@ -1,51 +1,33 @@
-import os
-import zipfile
-from datetime import datetime
-from sqlalchemy import Engine, inspect
+import time
+import schedule
+import threading
+from datetime import datetime, timedelta
 
 
-def data_export_(engine: Engine):
-  for table in get_tables(engine):
-    export_data_to_dump(engine, table, f'{table}.csv')
-  zip_filename = f'{datetime.now().strftime("%y%m%d%H%M%S")}.zip'
-  with zipfile.ZipFile(zip_filename, 'w', zipfile.ZIP_DEFLATED) as zipf:
-    for table in get_tables(engine):
-      csv_filename = f'{table}.csv'
-      export_data_to_dump(engine, table, csv_filename)
-      zipf.write(csv_filename)
-      os.remove(csv_filename)
+def schedule_backup():
+  threading.Timer(get_delay(), schedule_daily_job).start()
 
 
-def data_import_(engine: Engine, zip_filename: str):
-  with zipfile.ZipFile(zip_filename, 'r') as zipf:
-    zipf.extractall()
-    for file_name in zipf.namelist():
-      if file_name.endswith('.csv'):
-        table_name = os.path.splitext(file_name)[0]
-        import_data_from_dump(engine, table_name, file_name)
-        os.remove(file_name)
+def job():
+  print("La funzione è stata eseguita alle 4:20")
 
 
-def export_data_to_dump(engine: Engine, table_name: str, dump_file: str):
-  conn = engine.raw_connection()
-  cursor = conn.cursor()
-  with open(dump_file, 'w') as f:
-    cursor.copy_expert(f'COPY "{table_name}" TO STDOUT WITH CSV HEADER', f)
-  cursor.close()
-  conn.close()
+def get_delay() -> float:
+  now = datetime.now()
+  next_run = now.replace(hour=4, minute=20, second=0, microsecond=0)
+  if now > next_run:
+    next_run += timedelta(days=1)
+  return (next_run - now).total_seconds()
 
 
-def import_data_from_dump(engine: Engine, table_name: str, dump_file: str):
-  conn = engine.raw_connection()
-  cursor = conn.cursor()
-  cursor.execute(f'TRUNCATE TABLE "{table_name}"')
-  with open(dump_file, 'r') as f:
-    next(f)
-    cursor.copy_from(f, table_name, sep=',')
-  conn.commit()
-  cursor.close()
-  conn.close()
+def scheduler_thread():
+  while True:
+    schedule.run_pending()
+    time.sleep(3600)
 
 
-def get_tables(engine: Engine) -> list[str]:
-  return inspect(engine).get_table_names()
+def schedule_daily_job():
+  schedule.every().day.at("04:20").do(job)
+  scheduler_thread = threading.Thread(target=scheduler_thread)
+  scheduler_thread.daemon = True
+  scheduler_thread.start()
