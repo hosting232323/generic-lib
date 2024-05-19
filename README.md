@@ -38,7 +38,7 @@ python -m src --local
 
 Run with deployed produciton instance of generic-be on https://generic-be.replit.app/ and with automatic backup saved on git
 ```bash
-python -m src --produciton
+python -m src --production
 ```
 
 ## Api
