@@ -16,7 +16,7 @@ def set_database(url):
   global engine
   engine = create_engine(url, pool_pre_ping=True)
   alembic_migration_check(engine, Session)
-  if len(sys.argv) > 1 and sys.argv[1] == '--backup':
+  if len(sys.argv) > 1 and sys.argv[1] == '--production':
     push_backup_to_git(engine)
   return engine
 
