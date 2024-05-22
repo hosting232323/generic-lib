@@ -35,7 +35,7 @@ def change_password_(pass_token: str, new_password: str):
   }).json()
 
 
-def session_token_decorator_(func: function):
+def session_token_decorator_(func):
 
   def wrapper(*args, **kwargs):
     if not 'Authorization' in request.headers or request.headers['Authorization'] == 'null':

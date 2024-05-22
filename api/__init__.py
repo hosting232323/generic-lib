@@ -31,5 +31,5 @@ def change_password(pass_token: str, new_password: str):
   change_password_(pass_token, new_password)
 
 
-def session_token_decorator(func: function):
+def session_token_decorator(func):
   session_token_decorator_(func)
