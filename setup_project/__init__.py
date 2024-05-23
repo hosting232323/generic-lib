@@ -3,8 +3,17 @@ import sys
 import requests
 
 
+hostname = (
+  'https://generic-be.replit.app/'
+  if len(sys.argv) > 2 and sys.argv[2] == '--production' else
+  'http://127.0.0.1:8080/'
+  if len(sys.argv) > 2 and sys.argv[2] == '--local' else
+  'https://generic-be-test.replit.app/'
+)
+
+
 def main():
-  response = requests.get('https://generic-be.replit.app/setup-project', headers={
+  response = requests.get(f'{hostname}setup-project', headers={
     'Authorization': sys.argv[1]
   }).json()
   if response['status'] == 'ko':
