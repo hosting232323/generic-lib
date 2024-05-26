@@ -34,5 +34,5 @@ def start_scheduler():
     # Start the schedule for subsequent runs
     schedule_backup()
 
-# Start the scheduler
-start_scheduler()
+# Start the scheduler with
+#start_scheduler()
