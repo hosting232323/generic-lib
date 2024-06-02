@@ -1,5 +1,6 @@
 import os
 import json
+import shutil
 import zipfile
 from datetime import datetime
 from collections import deque
@@ -10,6 +11,7 @@ from psycopg2.extensions import cursor as PgCursor
 # Gestire la raw connection con un decorator
 
 def data_export_(engine: Engine):
+  json_backup_dir = 'json_backup'
   zip_filename = f'{datetime.now().strftime("%y%m%d%H%M%S")}.zip'
   with zipfile.ZipFile(zip_filename, 'w', zipfile.ZIP_DEFLATED) as zipf:
     for table in get_tables(engine):
@@ -18,6 +20,13 @@ def data_export_(engine: Engine):
         export_data_to_dump(engine, table, csv_filename)
         zipf.write(csv_filename)
         os.remove(csv_filename)
+        if os.path.exists(json_backup_dir):
+          for root, dirs, files in os.walk(json_backup_dir):
+            for file in files:
+              file_path = os.path.join(root, file)
+              arcname = os.path.relpath(file_path, json_backup_dir)
+              zipf.write(file_path, arcname=os.path.join(json_backup_dir, arcname))
+          shutil.rmtree(json_backup_dir)
   return zip_filename
 
 
@@ -50,9 +59,10 @@ def export_data_to_dump(engine: Engine, table_name: str, dump_file: str):
     json_backup_dir = os.path.join('json_backup', table_name)
     os.makedirs(json_backup_dir, exist_ok=True)
     json_columns_str = ', '.join(f'"{col}"' for col in json_columns)
-    cursor.execute(f'SELECT id {json_columns_str} FROM "{table_name}";')
+    cursor.execute(f'SELECT id, {json_columns_str} FROM "{table_name}";')
     for row in cursor.fetchall():
       row_id = row[0]
+      row = row[1:]
       for idx, json_col in enumerate(json_columns):
         json_data = row[idx]
         if json_data:
