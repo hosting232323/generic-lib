@@ -4,7 +4,6 @@ from sqlalchemy import create_engine
 from contextlib import contextmanager
 from sqlalchemy.orm import sessionmaker
 
-from .git import push_backup_to_git
 from .porting import data_export_, data_import_
 from .alembic_migration_check import alembic_migration_check
 
@@ -17,7 +16,7 @@ def set_database(url):
   engine = create_engine(url, pool_pre_ping=True)
   alembic_migration_check(engine, Session)
   if len(sys.argv) > 1 and sys.argv[1] == '--production':
-    push_backup_to_git(engine)
+    print('Production')
   return engine
 
 

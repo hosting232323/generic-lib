@@ -1,10 +1,11 @@
 import os
+import csv
 import json
 import shutil
 import zipfile
 from datetime import datetime
 from collections import deque
-from sqlalchemy import Engine, inspect
+from sqlalchemy import Engine, inspect, text
 from psycopg2.extensions import cursor as PgCursor
 
 
@@ -40,6 +41,7 @@ def data_import_(engine: Engine, zip_filename: str):
     for table_name in list(reversed(ordered_tables)):
       import_data_from_dump(engine, table_name, table_files[table_name])
       os.remove(table_files[table_name])
+    import_json_data(engine, 'json_backup')
 
 
 def export_data_to_dump(engine: Engine, table_name: str, dump_file: str):
@@ -51,9 +53,17 @@ def export_data_to_dump(engine: Engine, table_name: str, dump_file: str):
     WHERE table_name = '{table_name}';
   """)
   columns = cursor.fetchall()
-  columns_str = ', '.join(f'"{col[0]}"' for col in columns if not col[1] in ['json', 'jsonb'])
-  with open(dump_file, 'w', encoding='utf-8') as f:
-    cursor.copy_expert(f'COPY (SELECT {columns_str} FROM "{table_name}") TO STDOUT WITH CSV HEADER DELIMITER \'\t\'', f)
+  column_names = [col[0] for col in columns]
+  with open(dump_file, 'w', newline='', encoding='utf-8') as f:
+    writer = csv.writer(f, delimiter='\t')
+    writer.writerow(column_names)
+    cursor.execute(f'SELECT {", ".join(column_names)} FROM "{table_name}";')
+    for row in cursor.fetchall():
+      row_data = list(row)
+      for idx, col in enumerate(columns):
+        if col[1] in ['json', 'jsonb']:
+          row_data[idx] = '{}'
+      writer.writerow(row_data)
   json_columns = [col[0] for col in columns if col[1] in ['json', 'jsonb']]
   if json_columns:
     json_backup_dir = os.path.join('json_backup', table_name)
@@ -66,7 +76,7 @@ def export_data_to_dump(engine: Engine, table_name: str, dump_file: str):
       for idx, json_col in enumerate(json_columns):
         json_data = row[idx]
         if json_data:
-          json_file_path = os.path.join(json_backup_dir, f'{json_col}_{row_id}.json')
+          json_file_path = os.path.join(json_backup_dir, f'{json_col} {row_id}.json')
           with open(json_file_path, 'w', encoding='utf-8') as json_file:
             json.dump(json_data, json_file, ensure_ascii=False, indent=2)
   cursor.close()
@@ -87,13 +97,39 @@ def import_data_from_dump(engine: Engine, table_name: str, dump_file: str):
   try:
     cursor = conn.cursor()
     with open(dump_file, 'r', encoding='utf-8') as f:
-      next(f)
-      cursor.copy_from(f, table_name, sep='\t')
+      reader = csv.reader(f, delimiter='\t')
+      columns_str = ','.join(next(reader))
+      cursor.copy_expert(f'''
+        COPY "{table_name}" ({columns_str}) FROM STDIN WITH (FORMAT CSV, DELIMITER \'\t\')
+      ''', f)
     conn.commit()
     update_sequence(cursor, table_name)
   finally:
     cursor.close()
     conn.close()
+
+
+def import_json_data(engine: Engine, extract_to: str):
+  conn = engine.connect()
+  for root, dirs, files in os.walk(extract_to):
+    for dir in dirs:
+      table_path = os.path.join(root, dir)
+      for json_file in os.listdir(table_path):
+        if json_file.endswith('.json'):
+          json_col, row_id = json_file.replace('.json', '').split(' ')
+          with open(os.path.join(table_path, json_file), 'r', encoding='utf-8') as f:
+            json_data = json.load(f)
+          conn.execute(text(f'''
+            UPDATE "{dir}"
+            SET "{json_col}" = :json_data
+            WHERE id = :row_id
+          '''), {
+            'json_data': json.dumps(json_data),
+            'row_id': row_id
+          })
+          conn.commit()
+  conn.close()
+  shutil.rmtree(extract_to)
 
 
 def get_tables(engine: Engine) -> list[str]:
