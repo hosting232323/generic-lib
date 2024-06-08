@@ -41,7 +41,8 @@ def data_import_(engine: Engine, zip_filename: str):
     for table_name in list(reversed(ordered_tables)):
       import_data_from_dump(engine, table_name, table_files[table_name])
       os.remove(table_files[table_name])
-    import_json_data(engine, 'json_backup')
+    if os.path.exists('json_backup'):
+      import_json_data(engine, 'json_backup')
 
 
 def export_data_to_dump(engine: Engine, table_name: str, dump_file: str):
