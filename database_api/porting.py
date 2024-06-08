@@ -3,6 +3,7 @@ import csv
 import json
 import shutil
 import zipfile
+from tqdm import tqdm
 from datetime import datetime
 from collections import deque
 from sqlalchemy import Engine, inspect, text
@@ -15,7 +16,7 @@ def data_export_(engine: Engine):
   json_backup_dir = 'json_backup'
   zip_filename = f'{datetime.now().strftime("%y%m%d%H%M%S")}.zip'
   with zipfile.ZipFile(zip_filename, 'w', zipfile.ZIP_DEFLATED) as zipf:
-    for table in get_tables(engine):
+    for table in tqdm(get_tables(engine)):
       if table != 'alembic_version':
         csv_filename = f'{table}.csv'
         export_data_to_dump(engine, table, csv_filename)
@@ -36,12 +37,15 @@ def data_import_(engine: Engine, zip_filename: str):
     zipf.extractall()
     table_files = {os.path.splitext(file_name)[0]: file_name for file_name in zipf.namelist() if file_name.endswith('.csv')}
     ordered_tables = get_ordered_tables_by_dependency(engine, table_files.keys())
-    for table_name in ordered_tables:
+    print('Step 1 - Truncate')
+    for table_name in tqdm(ordered_tables):
       truncate_table(engine, table_name)
-    for table_name in list(reversed(ordered_tables)):
+    print('Step 2 - Popolate')
+    for table_name in tqdm(list(reversed(ordered_tables))):
       import_data_from_dump(engine, table_name, table_files[table_name])
       os.remove(table_files[table_name])
     if os.path.exists('json_backup'):
+      print('Step 3 - Json files')
       import_json_data(engine, 'json_backup')
 
 
@@ -62,7 +66,7 @@ def export_data_to_dump(engine: Engine, table_name: str, dump_file: str):
     for row in cursor.fetchall():
       row_data = list(row)
       for idx, col in enumerate(columns):
-        if col[1] in ['json', 'jsonb']:
+        if col[1] in ['json', 'jsonb'] and not row_data[idx] is None:
           row_data[idx] = '{}'
       writer.writerow(row_data)
   json_columns = [col[0] for col in columns if col[1] in ['json', 'jsonb']]
@@ -115,7 +119,8 @@ def import_json_data(engine: Engine, extract_to: str):
   for root, dirs, files in os.walk(extract_to):
     for dir in dirs:
       table_path = os.path.join(root, dir)
-      for json_file in os.listdir(table_path):
+      print(f'Table {dir}')
+      for json_file in tqdm(os.listdir(table_path)):
         if json_file.endswith('.json'):
           json_col, row_id = json_file.replace('.json', '').split(' ')
           with open(os.path.join(table_path, json_file), 'r', encoding='utf-8') as f:

@@ -4,3 +4,4 @@ build
 requests
 flask
 schedule
+tqdm
