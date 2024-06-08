@@ -1,5 +1,5 @@
 from .mail import send_mail_
-from .storage import upload_file_, download_file_
+from .storage import upload_file_, download_file_, delete_file_
 from .users import register_user_, login_, change_password_, ask_change_password_, session_token_decorator_
 
 
@@ -13,6 +13,10 @@ def upload_file(bucket_name: str, key: str, file_data):
 
 def download_file(bucket_name: str, key: str):
   return download_file_(bucket_name, key)
+
+
+def delete_file(bucket_name: str, key: str):
+  return delete_file_(bucket_name, key)
 
 
 def register_user(email: str, password: str = None):

@@ -42,3 +42,10 @@ def upload_file_(bucket_name: str, key: str, file_data):
     headers=default_headers,
     files={'file': file_data}
   ).json()
+
+
+def delete_file_(bucket_name, key):
+  return requests.delete(
+    f'{hostname}delete-file/{bucket_name}/{key}',
+    headers=default_headers
+  ).json()
