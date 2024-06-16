@@ -43,7 +43,7 @@ def change_password(pass_token: str, new_password: str):
   return change_password_(pass_token, new_password)
 
 
-def session_token_decorator_(func):
+def session_token_decorator(func):
 
   def wrapper(*args, **kwargs):
     if not 'Authorization' in request.headers or request.headers['Authorization'] == 'null':
