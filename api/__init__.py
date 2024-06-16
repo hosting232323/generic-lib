@@ -1,6 +1,14 @@
+import requests
+from flask import request
+
 from .mail import send_mail_
+from .settings import hostname, default_headers
 from .storage import upload_file_, download_file_, delete_file_
-from .users import register_user_, login_, change_password_, ask_change_password_, session_token_decorator_
+from .users import register_user_, login_, change_password_, ask_change_password_
+
+from database_api import Session
+# Ignore error!
+from src.database.schema import User
 
 
 def send_mail(receiver_email: str, body: str, subject: str):
@@ -35,5 +43,26 @@ def change_password(pass_token: str, new_password: str):
   return change_password_(pass_token, new_password)
 
 
-def session_token_decorator(func):
-  return session_token_decorator_(func)
+def session_token_decorator_(func):
+
+  def wrapper(*args, **kwargs):
+    if not 'Authorization' in request.headers or request.headers['Authorization'] == 'null':
+      return {'status': 'session', 'error': 'Token assente'}
+
+    response = requests.post(f'{hostname}check-token', headers=default_headers, json={
+      'token': request.headers['Authorization']
+    }).json()
+    if response['status'] == 'ko':
+      return response
+
+    else:
+      return func(get_user_by_mail(response['email']), *args, **kwargs)
+
+  return wrapper
+
+
+def get_user_by_mail(mail: str) -> User:
+  with Session() as session:
+    return session.query(User).filter(
+      User.email == mail
+    ).first()
