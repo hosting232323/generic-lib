@@ -31,3 +31,12 @@ def get_by_id(class_type, instance_id):
     return session.query(class_type).filter(
       class_type.id == instance_id
     ).first()
+
+
+def create_bulk(class_type, params_list):
+    with Session() as session:
+        """Create multiple entries in a single session."""
+        instances = [class_type(**params) for params in params_list]
+        session.bulk_save_objects(instances)
+        session.commit()
+        return instances
