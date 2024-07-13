@@ -3,11 +3,17 @@ import requests
 from .settings import hostname, default_headers
 
 
-def register_user_(email: str, password: str = None):
+def register_user_(email: str, password: str = None, register_mail: dict = None):
   body = {'email': email}
   if password:
     body['password'] = password
-  return requests.post(f'{hostname}register-user', headers=default_headers, json=body).json()
+  if register_mail:
+    body['register_mail'] = register_mail
+  return requests.post(
+    f'{hostname}register-user',
+    headers=default_headers,
+    json=body
+  ).json()
 
 
 def login_(email: str, password: str):
@@ -17,9 +23,10 @@ def login_(email: str, password: str):
   }).json()
 
 
-def ask_change_password_(email: str):
+def ask_change_password_(email: str, change_password_mail: dict):
   return requests.post(f'{hostname}ask-change-password', headers=default_headers, json={
-    'email': email
+    'email': email,
+    'change_password_mail': change_password_mail
   }).json()
 
 
