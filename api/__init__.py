@@ -27,8 +27,8 @@ def delete_file(bucket_name: str, key: str):
   return delete_file_(bucket_name, key)
 
 
-def register_user(email: str, password: str = None):
-  return register_user_(email, password)
+def register_user(email: str, password: str = None, register_mail: dict = None):
+  return register_user_(email, password, register_mail)
 
 
 def login(email: str, password: str):

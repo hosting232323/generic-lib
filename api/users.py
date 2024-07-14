@@ -3,7 +3,7 @@ import requests
 from .settings import hostname, default_headers
 
 
-def register_user_(email: str, password: str = None, register_mail: dict = None):
+def register_user_(email: str, password: str, register_mail: dict):
   body = {'email': email}
   if password:
     body['password'] = password
