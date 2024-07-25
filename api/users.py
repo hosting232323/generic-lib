@@ -24,10 +24,14 @@ def login_(email: str, password: str):
 
 
 def ask_change_password_(email: str, change_password_mail: dict):
-  return requests.post(f'{hostname}ask-change-password', headers=default_headers, json={
-    'email': email,
-    'change_password_mail': change_password_mail
-  }).json()
+  body = {'email': email}
+  if change_password_mail:
+    body['change_password_mail'] = change_password_mail
+  return requests.post(
+    f'{hostname}ask-change-password',
+    headers=default_headers,
+    json=body
+  ).json()
 
 
 def change_password_(pass_token: str, new_password: str):

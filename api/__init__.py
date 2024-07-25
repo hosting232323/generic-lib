@@ -35,8 +35,8 @@ def login(email: str, password: str):
   return login_(email, password)
 
 
-def ask_change_password(email: str):
-  return ask_change_password_(email)
+def ask_change_password(email: str, change_password_mail: dict = None):
+  return ask_change_password_(email, change_password_mail)
 
 
 def change_password(pass_token: str, new_password: str):
