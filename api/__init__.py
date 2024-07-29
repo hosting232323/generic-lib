@@ -27,16 +27,16 @@ def delete_file(bucket_name: str, key: str):
   return delete_file_(bucket_name, key)
 
 
-def register_user(email: str, password: str = None, register_mail: dict = None):
-  return register_user_(email, password, register_mail)
+def register_user(email: str, password: str = None, register_email: dict = None, sender_email: dict = None):
+  return register_user_(email, password, register_email, sender_email)
 
 
 def login(email: str, password: str):
   return login_(email, password)
 
 
-def ask_change_password(email: str, change_password_mail: dict = None):
-  return ask_change_password_(email, change_password_mail)
+def ask_change_password(email: str, change_password_email: dict = None, sender_email: dict = None):
+  return ask_change_password_(email, change_password_email, sender_email)
 
 
 def change_password(pass_token: str, new_password: str):
