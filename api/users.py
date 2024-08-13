@@ -18,6 +18,12 @@ def register_user_(email: str, password: str, register_email: dict, sender_email
   ).json()
 
 
+def delete_user_(email: str):
+  return requests.delete(f'{hostname}delete-user', headers=default_headers, json={
+    'email': email
+  }).json()
+
+
 def login_(email: str, password: str):
   return requests.post(f'{hostname}login', headers=default_headers, json={
     'email': email,
