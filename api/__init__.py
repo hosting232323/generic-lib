@@ -4,7 +4,7 @@ from flask import request
 from .mail import send_mail_
 from .settings import hostname, default_headers
 from .storage import upload_file_, download_file_, delete_file_
-from .users import register_user_, login_, change_password_, ask_change_password_
+from .users import register_user_, delete_user_, login_, change_password_, ask_change_password_
 
 from database_api import Session
 # Ignore error!
@@ -29,6 +29,10 @@ def delete_file(bucket_name: str, key: str):
 
 def register_user(email: str, password: str = None, register_email: dict = None, sender_email: dict = None):
   return register_user_(email, password, register_email, sender_email)
+
+
+def delete_user(email: str):
+  return delete_user_(email)
 
 
 def login(email: str, password: str):
