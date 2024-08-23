@@ -8,8 +8,8 @@ default_headers = {'Authorization': GENERIC_API_KEY}
 
 hostname = (
   'https://generic-be.replit.app/'
-  if len(sys.argv) > 1 and sys.argv[1] == '--production' else
+  if '--production' in sys.argv else
   'http://127.0.0.1:8080/'
-  if len(sys.argv) > 1 and sys.argv[1] == '--local' else
+  if '--local' in sys.argv else
   'https://generic-be-test.replit.app/'
 )
