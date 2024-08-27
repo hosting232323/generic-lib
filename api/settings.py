@@ -1,8 +1,7 @@
+import os
 import sys
 
-# Ignore error!
-from src.constants import GENERIC_API_KEY
-
+GENERIC_API_KEY = os.getenv('GENERIC_API_KEY')
 
 default_headers = {'Authorization': GENERIC_API_KEY}
 
