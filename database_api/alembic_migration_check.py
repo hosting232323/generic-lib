@@ -3,11 +3,13 @@ from sqlalchemy import Engine, Table, Column, String, MetaData, inspect, text
 
 
 def alembic_migration_check(engine: Engine, Session):
-  if not exists_alembic_table(engine):
-    raise Exception('Alembic table not exists')
+  migration_files = get_migration_files()
+  if len(migration_files) > 0:
+    if not exists_alembic_table(engine):
+      raise Exception('Alembic table not exists')
 
-  if get_last_version() != get_current_alembic_version(Session):
-    raise Exception('Alembic is not updated')
+    if get_last_version(migration_files) != get_current_alembic_version(Session):
+      raise Exception('Alembic is not updated')
 
 
 def exists_alembic_table(engine: Engine) -> bool:
@@ -22,9 +24,13 @@ def get_current_alembic_version(Session) -> str:
     )).scalar()
 
 
-def get_last_version() -> str:
+def get_migration_files():
   folder = os.path.join('src', 'database', 'alembic', 'versions')
-  migrations = [f for f in os.listdir(folder) if f.endswith('.py')]
+  return [f for f in os.listdir(folder) if f.endswith('.py')]
+
+
+def get_last_version(migrations) -> str:
+  folder = os.path.join('src', 'database', 'alembic', 'versions')
   revisions = []
   down_revisions = []
   for migration in migrations:
