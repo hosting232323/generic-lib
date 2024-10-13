@@ -3,7 +3,7 @@ import requests
 import tempfile
 from flask import send_file
 
-from .settings import hostname, default_headers
+from .settings import hostname
 
 
 mime_types = {
@@ -26,8 +26,7 @@ def download_file_(bucket_name: str, key: str):
 
   with open(temp_path, 'wb') as temp_file:
     temp_file.write(requests.get(
-      f'{hostname}download-file/{bucket_name}/{key}',
-      headers=default_headers
+      f'{hostname}download-file/{bucket_name}/{key}'
     ).content)
 
   return send_file(
@@ -39,7 +38,6 @@ def download_file_(bucket_name: str, key: str):
 def upload_file_(bucket_name: str, key: str, file_data):
   return requests.post(
     f'{hostname}upload-file/{bucket_name}/{key}',
-    headers=default_headers,
     files={'file': file_data}
   ).json()
 
@@ -47,5 +45,4 @@ def upload_file_(bucket_name: str, key: str, file_data):
 def delete_file_(bucket_name, key):
   return requests.delete(
     f'{hostname}delete-file/{bucket_name}/{key}',
-    headers=default_headers
   ).json()
