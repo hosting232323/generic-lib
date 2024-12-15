@@ -28,3 +28,7 @@ def read_settings_(settings_path: str):
 def read_products_(products_path: str):
     with open(products_path, "r") as file:
         return json.load(file)
+
+
+def _check_exists(path):
+    return os.path.exists(path)
