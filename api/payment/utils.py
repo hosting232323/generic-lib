@@ -30,5 +30,5 @@ def read_products_(products_path: str):
     return json.load(file)
 
 
-def check_exists(path):
+def _check_exists(path):
   return os.path.exists(path)

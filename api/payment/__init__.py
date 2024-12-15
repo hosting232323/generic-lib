@@ -1,5 +1,5 @@
 from .striper import create_stripe_session_
-from .utils import read_settings_, read_products_, check_exists
+from .utils import read_settings_, read_products_, _check_exists
 from flask import request
 
 
