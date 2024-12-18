@@ -7,12 +7,12 @@ from database_api.operations import create, delete, update
 from .setup import get_user_by_email, get_user_by_pass_token, User, DECODE_JWT_TOKEN
 
 
-def register_user(email: str, register_email: dict, password: str = None, params: dict = {}):
+def register_user(email: str, register_email: dict = None, password: str = None, params: dict = {}):
   if get_user_by_email(email):
     return {'status': 'ko', 'error': 'Email già in uso'}
 
   params['email'] = email
-  if password:
+  if password and register_email:
     params['password'] = password
     user = create(User.__subclasses__()[0], params)
     return {
