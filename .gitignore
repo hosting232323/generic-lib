@@ -3,3 +3,4 @@ __pycache__/
 .env
 .local/
 generic_lib.egg-info/
+/dist
