@@ -1,5 +1,7 @@
 import jwt
 import uuid
+import pytz
+import datetime
 from flask import request
 
 from ..email import send_email
@@ -7,12 +9,12 @@ from database_api.operations import create, delete, update
 from .setup import get_user_by_email, get_user_by_pass_token, User, DECODE_JWT_TOKEN
 
 
-def register_user(email: str, register_email: dict = None, password: str = None, params: dict = {}):
+def register_user(email: str, register_email: dict, password: str = None, params: dict = {}):
   if get_user_by_email(email):
     return {'status': 'ko', 'error': 'Email già in uso'}
 
   params['email'] = email
-  if password and register_email:
+  if password:
     params['password'] = password
     user = create(User.__subclasses__()[0], params)
     return {
@@ -42,7 +44,7 @@ def delete_user(email: str):
   return {'status': 'ok', 'message': 'Utente eliminato'}
 
 
-def login(email: str, password: str):
+def login(email: str, password: str, session_hours = 2):
   user: User = get_user_by_email(email)
   if not user:
     return {'status': 'ko', 'error': 'Utente non trovato'}
@@ -50,11 +52,13 @@ def login(email: str, password: str):
   if user.email != email or user.password != password:
     return {'status': 'ko', 'error': 'Credenziali errate'}
 
+  expiration_time = datetime.datetime.now(pytz.timezone("Europe/Rome")) + datetime.timedelta(hours=session_hours)
   return {
     'status': 'ok',
     'user_id': user.id,
     'token': jwt.encode({
-      'email': user.email
+      'email': user.email,
+      'exp': expiration_time.astimezone(pytz.utc).timestamp() 
     }, DECODE_JWT_TOKEN, algorithm='HS256')
   }
 
