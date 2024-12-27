@@ -6,3 +6,4 @@ flask
 schedule
 tqdm
 PyJWT
+boto3

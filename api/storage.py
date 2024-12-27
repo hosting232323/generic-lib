@@ -1,48 +1,48 @@
 import os
-import requests
-import tempfile
-from flask import send_file
-
-from .settings import hostname
+import boto3
+import botocore
+from flask import abort
 
 
-mime_types = {
-  'png': 'image/png',
-  'jpg': 'image/jpeg',
-  'jpeg': 'image/jpeg',
-  'gif': 'image/gif',
-  'pdf': 'application/pdf',
-  'txt': 'text/plain',
-  'doc': 'application/msword',
-  'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-}
+s3 = boto3.client(
+    's3',
+    aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
+    aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
+)
+ALLOWED_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'pdf', 'txt', 'doc', 'docx']
 
 
-def download_file_(bucket_name: str, key: str):
-  temp_path = os.path.join(
-    tempfile.gettempdir(),
-    f'{bucket_name}-{key.replace("_", ".")}'
-  )
+def storage_decorator(func):
 
-  with open(temp_path, 'wb') as temp_file:
-    temp_file.write(requests.get(
-      f'{hostname}download-file/{bucket_name}/{key}'
-    ).content)
+  def wrapper(bucket_name: str, key: str, *args, **kwargs):
+    if '.' in key:
+      extension = key.split('.')[-1]
+      if not extension in ALLOWED_EXTENSIONS:
+        return {'status': 'ko', 'error': 'Invalid file extension'}
+    else:
+      return {
+        'status': 'ko',
+        'error': 'File name does not contain an extension'
+      }
 
-  return send_file(
-    temp_path,
-    mimetype=mime_types[key.split('.')[-1]]
-  )
+    return func(bucket_name, key, *args, **kwargs)
 
-
-def upload_file_(bucket_name: str, key: str, file_data):
-  return requests.post(
-    f'{hostname}upload-file/{bucket_name}/{key}',
-    files={'file': file_data}
-  ).json()
+  return wrapper
 
 
-def delete_file_(bucket_name, key):
-  return requests.delete(
-    f'{hostname}delete-file/{bucket_name}/{key}',
-  ).json()
+def download_file_from_s3(bucket_name, key):
+  try:
+    return s3.get_object(Bucket=bucket_name, Key=str(key))['Body'].read()
+  except botocore.exceptions.ClientError as e:
+    if e.response['Error']['Code'] == 'NoSuchKey':
+      raise abort(404)
+    else:
+      raise e
+
+
+def delete_file_from_s3(bucket_name, key):
+  s3.delete_object(Bucket=bucket_name, Key=key)
+
+
+def upload_file_to_s3(file, bucket_name, key):
+  s3.upload_fileobj(file, bucket_name, key)
