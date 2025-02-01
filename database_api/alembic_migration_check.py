@@ -1,4 +1,6 @@
 import os
+from alembic import command
+from alembic.config import Config
 from sqlalchemy import Engine, Table, Column, String, MetaData, inspect, text
 
 
@@ -6,7 +8,7 @@ def alembic_migration_check(engine: Engine, Session):
   migration_files = get_migration_files()
   if len(migration_files) > 0:
     if not exists_alembic_table(engine):
-      raise Exception('Alembic table not exists')
+      command.upgrade(Config('alembic.ini'), 'head')
 
     if get_last_version(migration_files) != get_current_alembic_version(Session):
       raise Exception('Alembic is not updated')
@@ -41,10 +43,7 @@ def get_last_version(migrations) -> str:
     if 'revision' in namespace and 'down_revision' in namespace:
       revisions.append(namespace['revision'])
       down_revisions.append(namespace['down_revision'])
-  last_migrations = []
-  for revision in revisions:
-    if not revision in down_revisions:
-      last_migrations.append(revision)
+  last_migrations = [rev for rev in revisions if rev not in down_revisions]
   if len(last_migrations) != 1:
     raise Exception(f'Not found last migration on path {folder}')
   return last_migrations[0]
