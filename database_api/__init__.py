@@ -62,7 +62,7 @@ class BaseEntity(Base):
     return f'{self.__class__.__name__} {{{", ".join(attributes)}}}'
 
 
-class BaseEnum(Enum):
+class BaseEnum(enum.Enum):
 
   @classmethod
   def get_enum_option(cls, value):
