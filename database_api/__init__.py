@@ -1,9 +1,8 @@
 import sys
 import enum
 import traceback
-from enum import Enum
-from datetime import datetime, date
 from contextlib import contextmanager
+from datetime import datetime, date, time
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy import create_engine, Column, Integer, DateTime, func
 
@@ -54,6 +53,8 @@ class BaseEntity(Base):
           dict_obj[attribute] = dict_obj[attribute].strftime("%d/%m/%Y %H:%M")
         elif type(dict_obj[attribute]) is date:
           dict_obj[attribute] = dict_obj[attribute].strftime("%Y-%m-%d")
+        elif type(dict_obj[attribute]) is time:
+          dict_obj[attribute] = dict_obj[attribute].strftime("%H:%M:%S")
     return dict_obj
 
   def __repr__(self):
