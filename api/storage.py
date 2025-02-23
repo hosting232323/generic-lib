@@ -2,6 +2,10 @@ import os
 import boto3
 import botocore
 from flask import abort
+from dotenv import load_dotenv
+
+
+load_dotenv()
 
 
 s3 = boto3.client(
