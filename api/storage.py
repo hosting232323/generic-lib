@@ -7,13 +7,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+s3 = None
+ALLOWED_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'pdf', 'txt', 'doc', 'docx']
 
-s3 = boto3.client(
+if 'AWS_ACCESS_KEY_ID' in os.environ and 'AWS_SECRET_ACCESS_KEY' in os.environ:
+  s3 = boto3.client(
     's3',
     aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
     aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
-)
-ALLOWED_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'pdf', 'txt', 'doc', 'docx']
+  )
 
 
 def storage_decorator(func):
