@@ -1,3 +1,4 @@
+import os
 import sys
 import enum
 import traceback
@@ -6,6 +7,7 @@ from datetime import datetime, date, time
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy import create_engine, Column, Integer, DateTime, func
 
+from .backup import schedule_backup
 from .porting import data_export_, data_import_
 from .alembic_migration_check import alembic_migration_check
 
@@ -14,9 +16,13 @@ engine = None
 Base = declarative_base()
 
 
-def set_database(url):
+def set_database(url, backup = False):
   global engine
   engine = create_engine(url, pool_pre_ping=True)
+  
+  if os.environ.get('IS_DEV', 1) != 1 and backup:
+    schedule_backup(engine)
+    
   alembic_migration_check(engine, Session)
   return engine
 
@@ -50,11 +56,11 @@ class BaseEntity(Base):
         if isinstance(dict_obj[attribute], enum.Enum):
           dict_obj[attribute] = dict_obj[attribute].value
         elif type(dict_obj[attribute]) is datetime:
-          dict_obj[attribute] = dict_obj[attribute].strftime("%d/%m/%Y %H:%M")
+          dict_obj[attribute] = dict_obj[attribute].strftime('%d/%m/%Y %H:%M')
         elif type(dict_obj[attribute]) is date:
-          dict_obj[attribute] = dict_obj[attribute].strftime("%Y-%m-%d")
+          dict_obj[attribute] = dict_obj[attribute].strftime('%Y-%m-%d')
         elif type(dict_obj[attribute]) is time:
-          dict_obj[attribute] = dict_obj[attribute].strftime("%H:%M:%S")
+          dict_obj[attribute] = dict_obj[attribute].strftime('%H:%M:%S')
     return dict_obj
 
   def __repr__(self):
