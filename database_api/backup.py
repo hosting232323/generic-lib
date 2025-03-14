@@ -43,8 +43,10 @@ def manage_s3_backups(bucket, folder):
     backups = list_files_in_s3(bucket, folder)  
     backups.sort()
     
-    if len(backups) > 14:
-      files_to_delete = backups[:len(backups) - 14]  # Prende i più vecchi in eccesso
+    backup_days = os.environ.get('POSTGRES_BACKUP_DAYS', 14)
+    
+    if len(backups) > backup_days:
+      files_to_delete = backups[:len(backups) - backup_days]  # Prende i più vecchi in eccesso
       for file_key in files_to_delete:
         delete_file_from_s3(bucket, file_key)
         print(f"Eliminato vecchio backup: {file_key}")
