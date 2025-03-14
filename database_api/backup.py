@@ -7,6 +7,10 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime
 
 
+def get_project_folder():
+  return os.path.basename(os.getcwd())
+
+
 def schedule_backup(engine):
   scheduler = BackgroundScheduler()
   
@@ -24,8 +28,10 @@ def db_backup(interval, engine):
   try:
     zip_filename = data_export_(engine)
     
+    s3_key = f"{get_project_folder()}/{secure_filename(zip_filename)}"
+    
     with open(zip_filename, "rb") as file:
-      upload_file_to_s3(file, 'backuptestcl', secure_filename(zip_filename))
+      upload_file_to_s3(file, 'fastsite-postgres-backup', s3_key)
       
     os.remove(zip_filename)
     
