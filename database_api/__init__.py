@@ -17,11 +17,11 @@ engine = None
 Base = declarative_base()
 
 
-def set_database(url, cmd = False):
+def set_database(url, backup = False):
   global engine
   engine = create_engine(url, pool_pre_ping=True)
   
-  if os.environ.get('IS_DEV', 1) != 1 and not cmd:
+  if os.environ.get('IS_DEV', 1) != 1 and backup:
     schedule_backup(engine)
     
   alembic_migration_check(engine, Session)
@@ -77,8 +77,8 @@ class BaseEnum(enum.Enum):
 
 
 def data_export():
-  data_export_(set_database(sys.argv[1], True))
+  data_export_(set_database(sys.argv[1]))
 
 
 def data_import():
-  data_import_(set_database(sys.argv[1], True), sys.argv[2])
+  data_import_(set_database(sys.argv[1]), sys.argv[2])
