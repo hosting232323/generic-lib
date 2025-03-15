@@ -19,11 +19,11 @@ Base = declarative_base()
 def set_database(url, backup = False):
   global engine
   engine = create_engine(url, pool_pre_ping=True)
-  
+
+  alembic_migration_check(engine, Session)
   if os.environ.get('IS_DEV', 1) != 1 and backup:
     schedule_backup(engine)
-    
-  alembic_migration_check(engine, Session)
+
   return engine
 
 

@@ -58,3 +58,10 @@ from api import download_file, upload_file # da deprecare?
 from database_api import Session, set_database
 from database_api.operations import create, update, delete, get_by_id
 ```
+## Comandi base per runnare modifiche dopo aver già impostato il progetto e avviato il virtual environment (venv)
+
+```bash
+python -m build
+pip install .\dist\generic_lib-<version>.tar.gz[other]
+nome metodo creato su setup.cfg
+```
