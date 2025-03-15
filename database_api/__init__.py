@@ -21,7 +21,7 @@ def set_database(url, backup = False):
   engine = create_engine(url, pool_pre_ping=True)
 
   alembic_migration_check(engine, Session)
-  if os.environ.get('IS_DEV', 1) != 1 and backup:
+  if backup:
     schedule_backup(engine)
 
   return engine
