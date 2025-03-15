@@ -54,9 +54,5 @@ def upload_file_to_s3(file, bucket_name, key):
   s3.upload_fileobj(file, bucket_name, key)
   
 
-def list_files_in_s3(bucket, folder):
-  response = s3.list_objects_v2(Bucket=bucket, Prefix=folder)
-  
-  if 'Contents' in response:
-    return [obj['Key'] for obj in response['Contents']]
-  return []
+def list_files_in_s3(bucket, folder = ''):
+  return [obj['Key'] for obj in s3.list_objects_v2(Bucket=bucket, Prefix=folder)['Contents']]
