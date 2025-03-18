@@ -107,4 +107,5 @@ def flask_session_authentication(func):
     except jwt.InvalidTokenError:
       return {'status': 'session', 'error': 'Token non valido'}
 
+  wrapper.__name__ = func.__name__
   return wrapper
