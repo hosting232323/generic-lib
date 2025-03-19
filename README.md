@@ -61,8 +61,13 @@ from database_api.operations import create, update, delete, get_by_id
 
 ## Mailer
 
+Install python on your computer
 ```bash
-pip install generic_lib-<version>.tar.gz
+https://www.python.org
+```
+Install the library
+```bash
+pip install git+https://github.com/hosting232323/generic-lib.git
 ```
 Set environment variables by opening CMD as administrator
 ```bash

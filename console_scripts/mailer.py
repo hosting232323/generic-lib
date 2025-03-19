@@ -26,9 +26,6 @@ def spam_mail_(content_path: str, contact_path: str):
     print(f"Errore durante la lettura del file del contenuto: {e}")
     return
 
-  # Imposta un ritardo tra le email per evitare il blocco dello spam
-  delay = 5
-
   for i, (email, cognome) in enumerate(emails_dict.items(), start=1):
     try:
       email_personalizzato = txt_content.replace("[Cognome]", cognome)
@@ -40,6 +37,7 @@ def spam_mail_(content_path: str, contact_path: str):
       )
       print(f'✅ Email inviata con successo a: {email} ({i}/{len(emails_dict)})')
       
-      time.sleep(delay)
+      # Imposta un ritardo tra le email per evitare il blocco dello spam
+      time.sleep(5)
     except Exception as e:
       print(f'❌ Errore nell\'invio a {email}: {e}')
