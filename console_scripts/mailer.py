@@ -7,6 +7,7 @@ from api.email import send_email
 def spam_mail_():
   content_path = sys.argv[1]
   contact_path = sys.argv[2]
+
   try:
     emails_dict = {}
     with open(contact_path, 'r', encoding='utf-8') as email_file:
@@ -41,7 +42,7 @@ def spam_mail_():
         subject="Scopri i nostri servizi!"
       )
       print(f'✅ Email inviata con successo a: {email} ({i}/{len(emails_dict)})')
-      
+
       # Imposta un ritardo tra le email per evitare il blocco dello spam
       time.sleep(5)
     except Exception as e:
