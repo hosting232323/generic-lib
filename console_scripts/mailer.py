@@ -1,7 +1,12 @@
+import sys
 import time
+
 from api.email import send_email
 
-def spam_mail_(content_path: str, contact_path: str):
+
+def spam_mail_():
+  content_path = sys.argv[1]
+  contact_path = sys.argv[2]
   try:
     emails_dict = {}
     with open(contact_path, 'r', encoding='utf-8') as email_file:
