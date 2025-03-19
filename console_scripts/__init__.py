@@ -1,4 +1,4 @@
-from .mailer import spam_mail_
+from .mailer import spam_mail_main
 from .mismatch_files import run_comparison
 from database_api import data_export, data_import
 from .project_setup import main as setup_project_main
@@ -21,4 +21,4 @@ def setup_project():
 
 
 def spam_mail():
-  spam_mail_()
+  spam_mail_main()

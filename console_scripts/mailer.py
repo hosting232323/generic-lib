@@ -4,7 +4,7 @@ import time
 from api.email import send_email
 
 
-def spam_mail_():
+def spam_mail_main():
   content_path = sys.argv[1]
   contact_path = sys.argv[2]
 
