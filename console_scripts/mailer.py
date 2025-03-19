@@ -35,7 +35,7 @@ def spam_mail_(content_path: str, contact_path: str):
             
             send_email(
                 receiver_email=email,
-                body={'text': email_personalizzato},
+                body=email_personalizzato,
                 subject="Scopri i nostri servizi!"
             )
             print(f'✅ Email inviata con successo a: {email} ({i}/{len(emails_dict)})')
