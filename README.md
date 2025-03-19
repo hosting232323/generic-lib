@@ -58,6 +58,28 @@ from api import download_file, upload_file # da deprecare?
 from database_api import Session, set_database
 from database_api.operations import create, update, delete, get_by_id
 ```
+
+## Mailer
+
+```bash
+pip install generic_lib-<version>.tar.gz
+```
+Set environment variables by opening CMD as administrator
+```bash
+setx EMAIL_SENDER_NAME "IlTuoNome" /M
+setx EMAIL_SENDER_ADDRESS "seller@fastsite.it" /M
+setx EMAIL_SENDER_PASSWORD "Nj7U&C3AC+Q5" /M
+setx EMAIL_SENDER_SMTP_SERVER "smtps.aruba.it" /M
+```
+Add to PATH in environment variables
+```bash
+C:\Users\...\AppData\Roaming\Python\Python312\Scripts
+```
+Open CMD and run the script
+```bash
+ spam_mail file_contenuto_mail file_contenuto_contatti
+```
+
 ## Comandi base per runnare modifiche dopo aver già impostato il progetto e avviato il virtual environment (venv)
 
 ```bash
