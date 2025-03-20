@@ -18,12 +18,12 @@ def schedule_backup(engine):
   
   
 def db_backup(engine):
-  print(f'[{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}] Backup eseguito!')
   zip_filename = data_export_(engine)
+  print(f'[{zip_filename.split['.'][0]}] Backup eseguito!')
+
   s3_bucket = 'fastsite-postgres-backup'
   s3_folder = get_project_folder()
   s3_key = f'{s3_folder}/{secure_filename(zip_filename)}'
-
   with open(zip_filename, 'rb') as file:
     upload_file_to_s3(file, s3_bucket, s3_key)
   os.remove(zip_filename)
