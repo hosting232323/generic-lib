@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from werkzeug.utils import secure_filename
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -27,7 +28,7 @@ def db_backup(engine):
   os.remove(zip_filename)
   manage_s3_backups(s3_bucket, s3_folder)
 
-  print(f'[{zip_filename.split["."][0]}] Backup eseguito!')
+  print(f'[{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}] Backup eseguito!')
 
 
 def manage_s3_backups(bucket, folder):
