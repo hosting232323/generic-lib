@@ -1,5 +1,4 @@
 import os
-from datetime import datetime
 from werkzeug.utils import secure_filename
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -19,15 +18,16 @@ def schedule_backup(engine):
   
 def db_backup(engine):
   zip_filename = data_export_(engine)
-  print(f'[{zip_filename.split['.'][0]}] Backup eseguito!')
-
   s3_bucket = 'fastsite-postgres-backup'
   s3_folder = get_project_folder()
   s3_key = f'{s3_folder}/{secure_filename(zip_filename)}'
+
   with open(zip_filename, 'rb') as file:
     upload_file_to_s3(file, s3_bucket, s3_key)
   os.remove(zip_filename)
   manage_s3_backups(s3_bucket, s3_folder)
+
+  print(f'[{zip_filename.split["."][0]}] Backup eseguito!')
 
 
 def manage_s3_backups(bucket, folder):
