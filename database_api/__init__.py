@@ -15,13 +15,13 @@ engine = None
 Base = declarative_base()
 
 
-def set_database(url, backup = False):
+def set_database(url: str, sub_folder: str|None = None):
   global engine
   engine = create_engine(url, pool_pre_ping=True)
 
   alembic_migration_check(engine, Session)
-  if backup:
-    schedule_backup(engine)
+  if sub_folder:
+    schedule_backup(engine, sub_folder)
 
   return engine
 
