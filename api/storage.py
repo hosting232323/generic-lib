@@ -49,7 +49,7 @@ def upload_file_to_s3(file, bucket_name, key, allowed_extension):
   check = extension_allowed(key, allowed_extension)
     
   if check['status'] == 'ko':
-    raise check['error'] 
+    raise ValueError(check['error'])
     
   s3.upload_fileobj(file, bucket_name, key)
   
