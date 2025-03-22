@@ -30,7 +30,7 @@ def db_backup(engine: Engine, sub_folder: str):
 def manage_s3_backups(bucket: str, sub_folder: str):
   backups = list_files_in_s3(bucket, sub_folder)  
   backups.sort()
-  backup_days = os.environ.get('POSTGRES_BACKUP_DAYS', 14)
+  backup_days = int(os.environ.get('POSTGRES_BACKUP_DAYS', 14))
 
   if len(backups) > backup_days:
     files_to_delete = backups[:len(backups) - backup_days]
