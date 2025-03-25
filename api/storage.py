@@ -45,7 +45,7 @@ def delete_file_from_s3(bucket_name, key):
   s3.delete_object(Bucket=bucket_name, Key=key)
 
 
-def upload_file_to_s3(file, bucket_name, key, allowed_extension: None):
+def upload_file_to_s3(file, bucket_name, key, allowed_extension = None):
   if allowed_extension:
     check = extension_allowed(key, allowed_extension)
 
