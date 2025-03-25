@@ -45,14 +45,14 @@ def delete_file_from_s3(bucket_name, key):
   s3.delete_object(Bucket=bucket_name, Key=key)
 
 
-def upload_file_to_s3(file, bucket_name, key, allowed_extension):
-  check = extension_allowed(key, allowed_extension)
-    
-  if check['status'] == 'ko':
-    raise ValueError(check['error'])
-    
+def upload_file_to_s3(file, bucket_name, key, allowed_extension = None):
+  if allowed_extension:
+    check = extension_allowed(key, allowed_extension)
+    if check['status'] == 'ko':
+      raise ValueError(check['error'])
+
   s3.upload_fileobj(file, bucket_name, key)
-  
+
 
 def list_files_in_s3(bucket, folder = ''):
   return [obj['Key'] for obj in s3.list_objects_v2(Bucket=bucket, Prefix=folder)['Contents']]

@@ -10,7 +10,7 @@ from api.storage import upload_file_to_s3, delete_file_from_s3, list_files_in_s3
 
 def schedule_backup(engine: Engine, sub_folder: str):
   scheduler = BackgroundScheduler()
-  scheduler.add_job(lambda: db_backup(engine, sub_folder), 'interval', hours=24)
+  scheduler.add_job(lambda: db_backup(engine, sub_folder), 'cron', hour=4, minute=20)
   scheduler.start()
   
   
