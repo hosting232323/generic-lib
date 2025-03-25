@@ -48,9 +48,9 @@ def delete_file_from_s3(bucket_name, key):
 def upload_file_to_s3(file, bucket_name, key, allowed_extension = None):
   if allowed_extension:
     check = extension_allowed(key, allowed_extension)
+    if check['status'] == 'ko':
+      raise ValueError(check['error'])
 
-  if check['status'] == 'ko':
-    raise ValueError(check['error'])
   s3.upload_fileobj(file, bucket_name, key)
 
 
