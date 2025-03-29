@@ -7,31 +7,28 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+s3 = None
 
-s3 = boto3.client(
+if 'AWS_ACCESS_KEY_ID' in os.environ and 'AWS_SECRET_ACCESS_KEY' in os.environ:
+  s3 = boto3.client(
     's3',
     aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
     aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
-)
-ALLOWED_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'pdf', 'txt', 'doc', 'docx']
+  )
 
 
-def storage_decorator(func):
-
-  def wrapper(bucket_name: str, key: str, *args, **kwargs):
-    if '.' in key:
-      extension = key.split('.')[-1]
-      if not extension in ALLOWED_EXTENSIONS:
-        return {'status': 'ko', 'error': 'Invalid file extension'}
-    else:
-      return {
-        'status': 'ko',
-        'error': 'File name does not contain an extension'
-      }
-
-    return func(bucket_name, key, *args, **kwargs)
-
-  return wrapper
+def extension_allowed(key: str, allowed_extension: list[str]):
+  if '.' in key:
+    extension = key.split('.')[-1]
+    if not extension in allowed_extension:
+      return {'status': 'ko', 'error': 'Invalid file extension'}
+  else:
+    return {
+      'status': 'ko',
+      'error': 'File name does not contain an extension'
+    }
+    
+  return {'status': 'ok'}
 
 
 def download_file_from_s3(bucket_name, key):
@@ -48,5 +45,14 @@ def delete_file_from_s3(bucket_name, key):
   s3.delete_object(Bucket=bucket_name, Key=key)
 
 
-def upload_file_to_s3(file, bucket_name, key):
+def upload_file_to_s3(file, bucket_name, key, allowed_extension = None):
+  if allowed_extension:
+    check = extension_allowed(key, allowed_extension)
+    if check['status'] == 'ko':
+      raise ValueError(check['error'])
+
   s3.upload_fileobj(file, bucket_name, key)
+
+
+def list_files_in_s3(bucket, folder = ''):
+  return [obj['Key'] for obj in s3.list_objects_v2(Bucket=bucket, Prefix=folder)['Contents']]

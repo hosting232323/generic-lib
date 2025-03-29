@@ -7,4 +7,5 @@ schedule
 tqdm
 PyJWT
 boto3
+apscheduler
 stripe
