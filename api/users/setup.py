@@ -5,6 +5,7 @@ from database_api import Session, BaseEntity
 
 
 DECODE_JWT_TOKEN = os.getenv('DECODE_JWT_TOKEN')
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
 
 
 class User(BaseEntity):
