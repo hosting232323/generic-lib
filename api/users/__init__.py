@@ -110,8 +110,7 @@ def google_login(google_token: str, register_email: dict = None, session_hours: 
             register_result = register_user(
                 email=email,
                 register_email=register_email,
-                password=None,
-                params={'google_user': True}
+                password=None
             )
             if register_result['status'] == 'ko':
                 return register_result
