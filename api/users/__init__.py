@@ -1,9 +1,9 @@
 import jwt
 import uuid
 import pytz
-import datetime
 from flask import request
 from google.oauth2 import id_token
+from datetime import datetime, timedelta
 from google.auth.transport import requests
 
 from ..email import send_email
@@ -120,8 +120,7 @@ def create_jwt_token(email: str, session_hours: int):
   return jwt.encode(
     {
       'email': email,
-      'exp': datetime.datetime.now(pytz.timezone('Europe/Rome')) + datetime.timedelta(hours=session_hours)
-        .astimezone(pytz.utc).timestamp()
+      'exp': (datetime.now(pytz.timezone('Europe/Rome')) + timedelta(hours=session_hours)).astimezone(pytz.utc).timestamp()
     },
     DECODE_JWT_TOKEN,
     algorithm='HS256'

@@ -8,4 +8,4 @@ tqdm
 PyJWT
 boto3
 apscheduler
-google
+google-auth
