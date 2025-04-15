@@ -14,13 +14,13 @@ def parse_is_dev(folder_input):
 
   folder_input = folder_input.lower()
   if folder_input == "none" or folder_input == "":
-      return None
+    return None
   elif folder_input == "test":
-      return True
+    return True
   elif folder_input == "prod":
-      return False
+    return False
   else:
-      raise ValueError("Input non valido. Scegli tra 'None', 'prod', o 'test'.")
+    raise ValueError("Input non valido. Scegli tra 'None', 'prod', o 'test'.")
 
 def normalize_filename(filename):
   filename = filename.strip()
@@ -34,7 +34,7 @@ def get_db_files(db_url, query):
 def get_s3_files(bucket_name, is_dev=None):
   folder_prefix = ''
   if is_dev is not None:
-      folder_prefix = 'test/' if is_dev else 'prod/'
+    folder_prefix = 'test/' if is_dev else 'prod/'
   return {os.path.basename(url) for url in list_files_in_s3(bucket_name, folder=folder_prefix)}
     
 def run_comparison():
@@ -50,11 +50,11 @@ def run_comparison():
   
   print(f'\nFile presenti solo in S3 ({len(only_in_s3)}):')
   for file in sorted(only_in_s3):
-      print(f"- {file}")
+    print(f"- {file}")
   
   print(f'\nFile presenti solo nel DB ({len(only_in_db)}):')
   for file in sorted(only_in_db):
-      print(f"- {file}")
+    print(f"- {file}")
   
   # Salva risultati completi su file
   #with open('comparison_debug.txt', 'w') as f:

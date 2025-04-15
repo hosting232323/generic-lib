@@ -54,19 +54,19 @@ def upload_file_to_s3(file, bucket_name, key, allowed_extension = None):
   s3.upload_fileobj(file, bucket_name, key)
 
 
-def list_files_in_s3(bucket, folder='', is_dev=None):
+def list_files_in_s3(bucket, folder=''):
   files = []
   continuation_token = None
   while True:
     list_params = {'Bucket': bucket, 'Prefix': folder}
     if continuation_token:
-        list_params['ContinuationToken'] = continuation_token
+      list_params['ContinuationToken'] = continuation_token
 
     response = s3.list_objects_v2(**list_params)
     if 'Contents' in response:
-        files.extend(obj['Key'] for obj in response['Contents'])
+      files.extend(obj['Key'] for obj in response['Contents'])
     if response.get('IsTruncated'): 
-        continuation_token = response['NextContinuationToken']
+      continuation_token = response['NextContinuationToken']
     else:
-        break
+      break
   return files
