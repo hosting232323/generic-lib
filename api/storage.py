@@ -34,9 +34,9 @@ def get_s3_key(key, is_dev):
   if is_dev is None:
     return key 
   elif is_dev:
-    return f"test/{key}"
+    return f'test/{key}'
   else:
-    return f"prod/{key}"  
+    return f'prod/{key}'  
 
 def download_file_from_s3(bucket_name, key, is_dev=None):
   key = get_s3_key(key, is_dev)
