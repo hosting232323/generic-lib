@@ -30,8 +30,16 @@ def extension_allowed(key: str, allowed_extension: list[str]):
     
   return {'status': 'ok'}
 
+def get_s3_key(key, is_dev):
+  if is_dev is None:
+    return key 
+  elif is_dev:
+    return f'test/{key}'
+  else:
+    return f'prod/{key}'  
 
-def download_file_from_s3(bucket_name, key):
+def download_file_from_s3(bucket_name, key, is_dev=None):
+  key = get_s3_key(key, is_dev)
   try:
     return s3.get_object(Bucket=bucket_name, Key=str(key))['Body'].read()
   except botocore.exceptions.ClientError as e:
@@ -41,11 +49,13 @@ def download_file_from_s3(bucket_name, key):
       raise e
 
 
-def delete_file_from_s3(bucket_name, key):
+def delete_file_from_s3(bucket_name, key, is_dev=None):
+  key = get_s3_key(key, is_dev)
   s3.delete_object(Bucket=bucket_name, Key=key)
 
 
-def upload_file_to_s3(file, bucket_name, key, allowed_extension = None):
+def upload_file_to_s3(file, bucket_name, key, allowed_extension = None, is_dev=None):
+  key = get_s3_key(key, is_dev)
   if allowed_extension:
     check = extension_allowed(key, allowed_extension)
     if check['status'] == 'ko':
@@ -53,6 +63,19 @@ def upload_file_to_s3(file, bucket_name, key, allowed_extension = None):
 
   s3.upload_fileobj(file, bucket_name, key)
 
+def list_files_in_s3(bucket, folder=''):
+  files = []
+  continuation_token = None
+  while True:
+    list_params = {'Bucket': bucket, 'Prefix': folder}
+    if continuation_token:
+      list_params['ContinuationToken'] = continuation_token
 
-def list_files_in_s3(bucket, folder = ''):
-  return [obj['Key'] for obj in s3.list_objects_v2(Bucket=bucket, Prefix=folder)['Contents']]
+    response = s3.list_objects_v2(**list_params)
+    if 'Contents' in response:
+      files.extend(obj['Key'] for obj in response['Contents'])
+    if response.get('IsTruncated'): 
+      continuation_token = response['NextContinuationToken']
+    else:
+      break
+  return files
