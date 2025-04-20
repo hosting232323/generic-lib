@@ -1,10 +1,9 @@
-from .striper import create_stripe_session_
+from .stripe import create_stripe_session_
 from .utils import read_settings_, read_products_, _check_exists
 from flask import request
 
-
 def create_stripe_session(settings):
-  return create_stripe_session_(settings, request)
+  return create_stripe_session_(settings)
 
 
 def read_settings(settings_path):
