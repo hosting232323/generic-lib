@@ -56,7 +56,14 @@ def get_by_id(class_type, instance_id):
     return session.query(class_type).filter(
       class_type.id == instance_id
     ).first()
-  
+
+
+def get_by_ids(class_type, instance_ids):
+  with Session() as session:
+    return session.query(class_type).filter(
+      class_type.id.in_(instance_ids)
+    ).all()
+
 
 def get_all(class_type):
   with Session() as session:
