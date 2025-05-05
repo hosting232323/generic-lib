@@ -51,15 +51,18 @@ class BaseEntity(Base):
     dict_obj = {}
     for attribute in self.__dict__:
       if getattr(self, attribute) is not None and attribute != '_sa_instance_state':
-        dict_obj[attribute] = getattr(self, attribute)
-        if isinstance(dict_obj[attribute], enum.Enum):
-          dict_obj[attribute] = dict_obj[attribute].value
-        elif type(dict_obj[attribute]) is datetime:
-          dict_obj[attribute] = dict_obj[attribute].strftime('%d/%m/%Y %H:%M')
-        elif type(dict_obj[attribute]) is date:
-          dict_obj[attribute] = dict_obj[attribute].strftime('%Y-%m-%d')
-        elif type(dict_obj[attribute]) is time:
-          dict_obj[attribute] = dict_obj[attribute].strftime('%H:%M:%S')
+        if isinstance(getattr(self, attribute), enum.Enum):
+          dict_obj[attribute] = getattr(self, attribute).value
+        elif type(getattr(self, attribute)) is datetime:
+          dict_obj[attribute] = getattr(self, attribute).strftime('%d/%m/%Y %H:%M')
+        elif type(getattr(self, attribute)) is date:
+          dict_obj[attribute] = getattr(self, attribute).strftime('%Y-%m-%d')
+        elif type(getattr(self, attribute)) is time:
+          dict_obj[attribute] = getattr(self, attribute).strftime('%H:%M:%S')
+        elif type(getattr(self, attribute)) is bytes:
+          continue
+        else:
+          dict_obj[attribute] = getattr(self, attribute)
     return dict_obj
 
   def __repr__(self):
