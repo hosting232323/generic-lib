@@ -6,7 +6,6 @@ from datetime import datetime, date, time
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy import create_engine, Column, Integer, DateTime, func
 
-from .backup import schedule_backup
 from .porting import data_export_, data_import_
 from .alembic_migration_check import alembic_migration_check
 
@@ -20,8 +19,6 @@ def set_database(url: str, sub_folder: str|None = None):
   engine = create_engine(url, pool_pre_ping=True)
 
   alembic_migration_check(engine, Session)
-  if sub_folder:
-    schedule_backup(engine, sub_folder)
 
   return engine
 
