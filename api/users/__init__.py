@@ -146,3 +146,32 @@ def flask_session_authentication(func):
 
   wrapper.__name__ = func.__name__
   return wrapper
+
+
+def flask_session_authentication_restore(func):
+  def wrapper(*args, **kwargs):
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or auth_header == 'null':
+      return {'status': 'session', 'error': 'Token assente'}
+
+    try:
+      decoded = jwt.decode(auth_header, DECODE_JWT_TOKEN, algorithms=['HS256'])
+      user = get_user_by_email(decoded['email'])
+      if not user:
+        return {'status': 'session', 'error': 'Utente non trovato'}
+      
+      new_token = create_jwt_token(user.email, 2)
+      result = func(user, *args, **kwargs)
+
+      if isinstance(result, dict):
+        result['new_token'] = new_token
+
+      return result
+
+    except jwt.ExpiredSignatureError:
+      return {'status': 'session', 'error': 'Token scaduto'}
+    except jwt.InvalidTokenError:
+      return {'status': 'session', 'error': 'Token non valido'}
+
+  wrapper.__name__ = func.__name__
+  return wrapper
