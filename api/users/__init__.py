@@ -8,7 +8,7 @@ from google.auth.transport import requests
 
 from ..email import send_email
 from database_api.operations import create, delete, update
-from .setup import get_user_by_email, get_user_by_pass_token, User, DECODE_JWT_TOKEN, GOOGLE_CLIENT_ID
+from .setup import get_user_by_email, get_user_by_pass_token, User, DECODE_JWT_TOKEN, GOOGLE_CLIENT_ID, SESSION_HOURS
 
 
 def register_user(email: str, register_email: dict, password: str = None, params: dict = {}):
@@ -46,7 +46,7 @@ def delete_user(email: str):
   return {'status': 'ok', 'message': 'Utente eliminato'}
 
 
-def login(email: str, password: str, session_hours = 2):
+def login(email: str, password: str):
   user: User = get_user_by_email(email)
   if not user:
     return {'status': 'ko', 'error': 'Utente non trovato'}
@@ -57,7 +57,7 @@ def login(email: str, password: str, session_hours = 2):
   return {
     'status': 'ok',
     'user_id': user.id,
-    'token': create_jwt_token(user.email, session_hours)
+    'token': create_jwt_token(user.email)
   }
 
 
@@ -88,7 +88,7 @@ def change_password(pass_token: str, new_password: str):
   return {'status': 'ok', 'message': 'Password aggiornata con successo'}
 
 
-def google_login(google_token: str, register_email: dict = None, session_hours: int = 2):
+def google_login(google_token: str, register_email: dict = None):
   email = id_token.verify_oauth2_token(
     google_token, 
     requests.Request(),
@@ -112,15 +112,17 @@ def google_login(google_token: str, register_email: dict = None, session_hours: 
   return {
     'status': 'ok',
     'user_id': user.id,
-    'token': create_jwt_token(user.email, session_hours)
+    'token': create_jwt_token(user.email)
   }
 
 
-def create_jwt_token(email: str, session_hours: int):
+def create_jwt_token(email: str):
   return jwt.encode(
     {
       'email': email,
-      'exp': (datetime.now(pytz.timezone('Europe/Rome')) + timedelta(hours=session_hours)).astimezone(pytz.utc).timestamp()
+      'exp': (
+        datetime.now(pytz.timezone('Europe/Rome')) + timedelta(hours=SESSION_HOURS)
+      ).astimezone(pytz.utc).timestamp()
     },
     DECODE_JWT_TOKEN,
     algorithm='HS256'
@@ -128,17 +130,46 @@ def create_jwt_token(email: str, session_hours: int):
 
 
 def flask_session_authentication(func):
-
   def wrapper(*args, **kwargs):
-    if not 'Authorization' in request.headers or request.headers['Authorization'] == 'null':
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or auth_header == 'null':
       return {'status': 'session', 'error': 'Token assente'}
 
     try:
       return func(get_user_by_email(jwt.decode(
-        request.headers['Authorization'],
+        auth_header,
         DECODE_JWT_TOKEN,
         algorithms=['HS256']
       )['email']), *args, **kwargs)
+    except jwt.ExpiredSignatureError:
+      return {'status': 'session', 'error': 'Token scaduto'}
+    except jwt.InvalidTokenError:
+      return {'status': 'session', 'error': 'Token non valido'}
+
+  wrapper.__name__ = func.__name__
+  return wrapper
+
+
+def flask_session_authentication_restore(func):
+  def wrapper(*args, **kwargs):
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or auth_header == 'null':
+      return {'status': 'session', 'error': 'Token assente'}
+
+    try:
+      user = get_user_by_email(jwt.decode(
+        auth_header,
+        DECODE_JWT_TOKEN,
+        algorithms=['HS256']
+      )['email'])
+      if not user:
+        return {'status': 'session', 'error': 'Utente non trovato'}
+
+      result = func(user, *args, **kwargs)
+      if isinstance(result, dict):
+        result['new_token'] = create_jwt_token(user.email)
+      return result
+
     except jwt.ExpiredSignatureError:
       return {'status': 'session', 'error': 'Token scaduto'}
     except jwt.InvalidTokenError:
