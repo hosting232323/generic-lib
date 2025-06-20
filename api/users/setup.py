@@ -4,6 +4,7 @@ from sqlalchemy import Column, String
 from database_api import Session, BaseEntity
 
 
+SESSION_HOURS = int(os.environ.get('SESSION_HOURS', 5))
 DECODE_JWT_TOKEN = os.getenv('DECODE_JWT_TOKEN')
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
 
