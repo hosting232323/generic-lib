@@ -49,3 +49,8 @@ def check_aws_mismatch_(db_url, query, bucket_name, folder_input):
   print(f'\nFile presenti solo nel DB ({len(only_in_db)}):')
   for file in sorted(only_in_db):
     print(f'- {file}')
+    
+  return {
+    "only_in_s3": only_in_s3,
+    "only_in_db": only_in_db
+}
