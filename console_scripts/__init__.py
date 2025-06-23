@@ -1,11 +1,12 @@
 from .mailer import spam_mail_main
-from .mismatch_files import run_comparison
+from .mismatch_files import check_aws_mismatch_, get_user_input
 from database_api import data_export, data_import
 from .project_setup import main as setup_project_main
 
 
 def check_aws_mismatch():
-  run_comparison()
+  db_url, query, bucket_name, folder_input = get_user_input()
+  check_aws_mismatch_(db_url, query, bucket_name, folder_input)
 
 
 def db_export():

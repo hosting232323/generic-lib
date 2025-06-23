@@ -36,8 +36,7 @@ def get_s3_files(bucket_name, is_dev=None):
   return {os.path.basename(url) for url in list_files_in_s3(bucket_name, folder=folder_prefix)}
 
  
-def run_comparison():
-  db_url, query, bucket_name, folder_input = get_user_input()
+def check_aws_mismatch_(db_url, query, bucket_name, folder_input):
   db_files = get_db_files(db_url, query)
   s3_files = get_s3_files(bucket_name, parse_is_dev(folder_input))
 
