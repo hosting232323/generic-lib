@@ -29,7 +29,7 @@ def register_user(email: str, register_email: dict, password: str = None, params
     user: User = create(User.__subclasses__()[0], params)
     send_email(
       user.email,
-      register_email['body'].format(user.pass_token),
+      register_email['body'].format(domain=request.origin, token=user.pass_token),
       register_email['subject']
     )
     return {
@@ -70,7 +70,7 @@ def ask_change_password(email: str, change_password_email: dict):
 
   send_email(
     user.email,
-    change_password_email['body'].format(user.pass_token),
+    change_password_email['body'].format(domain=request.origin, token=user.pass_token),
     change_password_email['subject']
   )
   return {'status': 'ok', 'message': 'Mail per cambio password inviata'}
