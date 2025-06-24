@@ -11,7 +11,7 @@ from database_api.operations import create, delete, update
 from .setup import get_user_by_email, get_user_by_pass_token, User, DECODE_JWT_TOKEN, GOOGLE_CLIENT_ID, SESSION_HOURS
 
 
-def register_user(email: str, register_email: dict, password: str = None, params: dict = {}, domain='wooffy.it'):
+def register_user(email: str, register_email: dict, password: str = None, params: dict = {}):
   if get_user_by_email(email):
     return {'status': 'ko', 'error': 'Email già in uso'}
 
@@ -29,7 +29,7 @@ def register_user(email: str, register_email: dict, password: str = None, params
     user: User = create(User.__subclasses__()[0], params)
     send_email(
       user.email,
-      register_email['body'].format(domain=domain, token=user.pass_token),
+      register_email['body'].format(domain=request.origin, token=user.pass_token),
       register_email['subject']
     )
     return {
@@ -61,7 +61,7 @@ def login(email: str, password: str):
   }
 
 
-def ask_change_password(email: str, change_password_email: dict, domain='wooffy.it'):
+def ask_change_password(email: str, change_password_email: dict):
   user = get_user_by_email(email)
   if not user:
     return {'status': 'ko', 'error': 'Utente non trovato'}
@@ -70,7 +70,7 @@ def ask_change_password(email: str, change_password_email: dict, domain='wooffy.
 
   send_email(
     user.email,
-    change_password_email['body'].format(domain=domain, token=user.pass_token),
+    change_password_email['body'].format(domain=request.origin, token=user.pass_token),
     change_password_email['subject']
   )
   return {'status': 'ok', 'message': 'Mail per cambio password inviata'}
