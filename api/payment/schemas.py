@@ -7,6 +7,7 @@ class PaymentRequest:
   stripe_api_key: str
   url: dict
   line_items: list
+  metadata: dict
   customer_email: Union[None, str] = None
   shipping_address_collection: Union[None, dict] = None
 
@@ -23,6 +24,12 @@ class PaymentRequest:
     
     if self.line_items is None or not isinstance(self.line_items, list):
       raise ValueError("line_items must be a list and is required")
+    
+    if not self.metadata or not self.metadata.get("project"):
+      raise ValueError("project is required to compile metadata")
+
+    if self.metadata.get("project") and not isinstance(self.metadata.get("project"), str):
+      raise ValueError("project must be a string")
     
     for item in self.line_items:
       if not isinstance(item, dict):
