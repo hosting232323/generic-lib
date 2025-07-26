@@ -97,8 +97,6 @@ def get_customer_data(filters):
       raise ValueError("Stripe API key is required")
     if not filters.get("customer_email"):
       raise ValueError("Customer email is required")
-    if not filters.get("metadata").get("project"):
-      raise ValueError("Project is required")
 
     stripe.api_key = filters.get("stripe_api_key")
     customers = stripe.Customer.list(email=filters.get("customer_email")).data
@@ -131,15 +129,25 @@ def get_customer_data(filters):
       }
 
     if "subscriptions" in filters.get("params", {}):
-      customer_data["subscriptions"] = []
+      customer_data["subscriptions"] = {}
 
       # get all subscriptions
       subscriptions = stripe.Subscription.list(customer=customer.id).data
       
       for subscription in subscriptions:
-        if subscription.metadata.get("project") == filters.get("metadata").get("project"):
-          customer_data["subscriptions"].append(subscription)
-          
+        project = subscription.metadata.get("project")
+        
+        if not project:
+          continue
+        
+        # if a project filter is set, skip subscriptions not matching the project
+        if filters.get("metadata") and filters.get("metadata").get("projects") and project not in filters.get("metadata").get("projects"):
+          continue
+        
+        if project not in customer_data["subscriptions"]:
+          customer_data["subscriptions"][project] = []
+        
+        customer_data["subscriptions"][project].append(subscription)
 
     if "payments" in filters.get("params", {}):
       customer_data["payments"] = []
