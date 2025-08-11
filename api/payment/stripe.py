@@ -128,6 +128,7 @@ def get_customer_data(filters):
         "address": customer.address
       }
 
+    # subscriptions
     if "subscriptions" in filters.get("params", {}):
       customer_data["subscriptions"] = {}
 
@@ -149,15 +150,27 @@ def get_customer_data(filters):
         
         customer_data["subscriptions"][project].append(subscription)
 
+    # payments
     if "payments" in filters.get("params", {}):
-      customer_data["payments"] = []
+      customer_data["payments"] = {}
 
       # get all payments
       payments = stripe.PaymentIntent.list(customer=customer.id).data
 
       for payment in payments:
-        if payment.metadata.get("project") == filters.get("metadata").get("project"):
-          customer_data["payments"].append(payment)
+        project = payment.metadata.get("project")
+        
+        if not project:
+          continue
+        
+        # if a project filter is set, skip subscriptions not matching the project
+        if filters.get("metadata") and filters.get("metadata").get("projects") and project not in filters.get("metadata").get("projects"):
+          continue
+
+        if project not in customer_data["payments"]:
+          customer_data["payments"][project] = []
+
+        customer_data["payments"][project].append(payment)
 
     return {
       "status": "ok",
