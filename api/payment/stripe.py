@@ -19,6 +19,16 @@ def create_stripe_session_(params: PaymentRequest):
         customer = stripe.Customer.create(email=params.customer_email)
         customer_id = customer.id
 
+    # Validate and clean metadata
+    validated_metadata = {}
+    if params.metadata:
+      for key, value in params.metadata.items():
+        # Stripe metadata keys and values must be strings
+        # and values cannot exceed 500 characters
+        str_key = str(key)[:40]  # Limit key length
+        str_value = str(value)[:500]  # Limit value length per Stripe requirements
+        validated_metadata[str_key] = str_value
+
     session_params = {
       "payment_method_types": ["card"],
       "mode": params.mode,
@@ -32,6 +42,16 @@ def create_stripe_session_(params: PaymentRequest):
     
     if params.shipping_address_collection:
       session_params["shipping_address_collection"] = params.shipping_address_collection
+    
+    # if is a subscription, we have to add subscription data and the inside metadata
+    if params.mode == "subscription":
+      session_params["subscription_data"] = {
+        "metadata": validated_metadata
+      }
+    
+    # if is a payment, we have to add metadata directly to the session
+    if params.mode == "payment":
+      session_params["metadata"] = validated_metadata
 
     session = stripe.checkout.Session.create(**session_params)
 
@@ -71,18 +91,16 @@ def stripe_webhook(payload, sig_header, webhook_secret):
   except stripe.error.SignatureVerificationError as e:
       raise e
   
-def get_customer_data(stripe_api_key, customer_email, params=None):
+def get_customer_data(filters):
   try:
-    if not stripe_api_key:
+    if not filters.get("stripe_api_key"):
       raise ValueError("Stripe API key is required")
-    if not customer_email:
+    if not filters.get("customer_email"):
       raise ValueError("Customer email is required")
-    if params is not None and not isinstance(params, list):
-      raise ValueError("Params must be None or a list")
-    
-    stripe.api_key = stripe_api_key
-    customers = stripe.Customer.list(email=customer_email).data
-    
+
+    stripe.api_key = filters.get("stripe_api_key")
+    customers = stripe.Customer.list(email=filters.get("customer_email")).data
+
     # if there are no customers, return immediately
     if not customers:
       return {
@@ -101,7 +119,7 @@ def get_customer_data(stripe_api_key, customer_email, params=None):
     # create object to store customer data
     customer_data = {}
 
-    if params is None or "base_info" in params:
+    if "base_info" in filters.get("params", {}):
       customer_data["base_info"] = {
         "id": customer.id,
         "email": customer.email,
@@ -110,23 +128,49 @@ def get_customer_data(stripe_api_key, customer_email, params=None):
         "address": customer.address
       }
 
-    if params is None or "subscriptions" in params:
-      customer_data["subscriptions"] = []
+    # subscriptions
+    if "subscriptions" in filters.get("params", {}):
+      customer_data["subscriptions"] = {}
 
       # get all subscriptions
       subscriptions = stripe.Subscription.list(customer=customer.id).data
-
+      
       for subscription in subscriptions:
-        customer_data["subscriptions"].append(subscription)
+        project = subscription.metadata.get("project")
+        
+        if not project:
+          continue
+        
+        # if a project filter is set, skip subscriptions not matching the project
+        if filters.get("metadata") and filters.get("metadata").get("projects") and project not in filters.get("metadata").get("projects"):
+          continue
+        
+        if project not in customer_data["subscriptions"]:
+          customer_data["subscriptions"][project] = []
+        
+        customer_data["subscriptions"][project].append(subscription)
 
-    if params is None or "payments" in params:
-      customer_data["payments"] = []
+    # payments
+    if "payments" in filters.get("params", {}):
+      customer_data["payments"] = {}
 
       # get all payments
       payments = stripe.PaymentIntent.list(customer=customer.id).data
 
       for payment in payments:
-        customer_data["payments"].append(payment)
+        project = payment.metadata.get("project")
+        
+        if not project:
+          continue
+        
+        # if a project filter is set, skip subscriptions not matching the project
+        if filters.get("metadata") and filters.get("metadata").get("projects") and project not in filters.get("metadata").get("projects"):
+          continue
+
+        if project not in customer_data["payments"]:
+          customer_data["payments"][project] = []
+
+        customer_data["payments"][project].append(payment)
 
     return {
       "status": "ok",
