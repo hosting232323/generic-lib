@@ -14,7 +14,7 @@ engine = None
 Base = declarative_base()
 
 
-def set_database(url: str, sub_folder: str|None = None):
+def set_database(url: str):
   global engine
   engine = create_engine(url, pool_pre_ping=True)
 
