@@ -75,7 +75,7 @@ def stripe_webhook(payload, sig_header, webhook_secret):
       payload, sig_header, webhook_secret
     )
 
-    if event["type"] is not "invoice.paid" or event["type"] is not "invoice.payment_succeeded":
+    if event["type"] not in ["invoice.paid", "invoice.payment_succeeded"]:
       return {
         "status": "ko",
         "message": "Event type not handled"
