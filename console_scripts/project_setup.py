@@ -5,7 +5,7 @@ import requests
 
 def main():
   response = requests.get(
-    f'https://generic-be.replit.app/setup-project?project_type={sys.argv[1]}'
+    f'https://strong-box.ddns.net:8443/generic-be/setup-project?project_type={sys.argv[1]}'
   ).json()
   if response['status'] == 'ko':
     raise Exception(response['error'])
