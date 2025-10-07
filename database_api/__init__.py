@@ -1,12 +1,13 @@
+import os
 import sys
 import enum
 import traceback
+import subprocess
 from contextlib import contextmanager
 from datetime import datetime, date, time
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy import create_engine, Column, Integer, DateTime, func
 
-from .porting import data_export_, data_import_
 from .alembic_migration_check import alembic_migration_check
 
 
@@ -75,8 +76,21 @@ class BaseEnum(enum.Enum):
 
 
 def data_export():
-  data_export_(sys.argv[1])
+  subprocess.run([
+    'pg_dump',
+    f'--dbname={sys.argv[1]}',
+    '--blobs',
+    '-f', f'{datetime.now().strftime("%y%m%d%H%M%S")}.sql'
+  ], check=True)
 
 
 def data_import():
-  data_import_(sys.argv[1], sys.argv[2])
+  if not os.path.exists(sys.argv[2]):
+    print(f'File non trovato: {sys.argv[2]}')
+    sys.exit(1)
+
+  subprocess.run([
+    'psql',
+    f'--dbname={sys.argv[1]}',
+    '-f', sys.argv[2]
+  ], check=True)
