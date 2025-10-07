@@ -1,3 +1,4 @@
+import sys
 import enum
 import traceback
 from contextlib import contextmanager
@@ -74,8 +75,8 @@ class BaseEnum(enum.Enum):
 
 
 def data_export():
-  data_export_()
+  data_export_(sys.argv[1])
 
 
 def data_import():
-  data_import_()
+  data_import_(sys.argv[1], sys.argv[2])
