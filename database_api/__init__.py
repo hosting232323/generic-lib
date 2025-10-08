@@ -1,8 +1,5 @@
-import os
-import sys
 import enum
 import traceback
-import subprocess
 from contextlib import contextmanager
 from datetime import datetime, date, time
 from sqlalchemy.orm import sessionmaker, declarative_base
@@ -73,24 +70,3 @@ class BaseEnum(enum.Enum):
   @classmethod
   def get_enum_option(cls, value):
     return next((p for p in cls if p.value == value), None)
-
-
-def data_export():
-  subprocess.run([
-    'pg_dump',
-    f'--dbname={sys.argv[1]}',
-    '--blobs',
-    '-f', f'{datetime.now().strftime("%y%m%d%H%M%S")}.sql'
-  ], check=True)
-
-
-def data_import():
-  if not os.path.exists(sys.argv[2]):
-    print(f'File non trovato: {sys.argv[2]}')
-    sys.exit(1)
-
-  subprocess.run([
-    'psql',
-    f'--dbname={sys.argv[1]}',
-    '-f', sys.argv[2]
-  ], check=True)
