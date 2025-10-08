@@ -1,9 +1,6 @@
 import os
 import traceback
-from flask import jsonify, request
-
-from database_api import Session
-from database_api.backup import db_backup
+from flask import request
 
 
 def error_catching_decorator(func):
@@ -13,10 +10,10 @@ def error_catching_decorator(func):
       return func(*args, **kwargs)
     except Exception:
       traceback.print_exc()
-      return jsonify({
+      return {
         'status': 'ko',
         'message': 'Errore generico'
-      })
+      }
 
   wrapper.__name__ = func.__name__
   return wrapper
@@ -35,9 +32,3 @@ def swagger_decorator(func):
 
   wrapper.__name__ = func.__name__
   return wrapper
-
-
-def internal_backup(db_name):
-  with Session() as session:
-    db_backup(session.get_bind(), db_name)
-    return 'Backup eseguito', 200
