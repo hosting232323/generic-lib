@@ -1,14 +1,13 @@
 import os
 from datetime import datetime
-from sqlalchemy import Engine
 from werkzeug.utils import secure_filename
 
-from .porting import data_export_
+from .porting import data_export
 from api.storage import upload_file_to_s3, delete_file_from_s3, list_files_in_s3
 
   
-def db_backup(engine: Engine, sub_folder: str):
-  zip_filename = data_export_(engine)
+def db_backup(db_url: str, sub_folder: str):
+  zip_filename = data_export(db_url)
   s3_bucket = 'fastsite-postgres-backup'
   s3_key = f'{sub_folder}/{secure_filename(zip_filename)}'
 
