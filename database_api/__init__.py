@@ -1,4 +1,3 @@
-import sys
 import enum
 import traceback
 from contextlib import contextmanager
@@ -6,7 +5,6 @@ from datetime import datetime, date, time
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy import create_engine, Column, Integer, DateTime, func
 
-from .porting import data_export_, data_import_
 from .alembic_migration_check import alembic_migration_check
 
 
@@ -72,11 +70,3 @@ class BaseEnum(enum.Enum):
   @classmethod
   def get_enum_option(cls, value):
     return next((p for p in cls if p.value == value), None)
-
-
-def data_export():
-  data_export_(set_database(sys.argv[1]))
-
-
-def data_import():
-  data_import_(set_database(sys.argv[1]), sys.argv[2])
