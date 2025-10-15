@@ -1,7 +1,7 @@
 stages:
   - lint
 
-ruff_lint:
+lint:
   stage: lint
   image: hosting23232323/python-node:3.11
   script:
