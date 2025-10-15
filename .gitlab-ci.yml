@@ -1,0 +1,10 @@
+stages:
+  - lint
+
+ruff_lint:
+  stage: lint
+  image: hosting23232323/python-node:3.11
+  script:
+    - pip install ruff
+    - ruff check ./api ./console_scripts ./database_api --exit-non-zero-on-fix
+    - ruff check ./api ./console_scripts ./database_api --exit-non-zero-on-fix

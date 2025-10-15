@@ -22,7 +22,7 @@ def error_catching_decorator(func):
 def swagger_decorator(func):
 
   def wrapper(*args, **kwargs):
-    if not 'SwaggerAuthorization' in request.headers or request.headers['SwaggerAuthorization'] != os.environ['SWAGGER_KEY']:
+    if 'SwaggerAuthorization' not in request.headers or request.headers['SwaggerAuthorization'] != os.environ['SWAGGER_KEY']:
       return {
         'status': 'ko',
         'message': 'Autorizzazione negata'

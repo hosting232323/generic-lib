@@ -20,7 +20,7 @@ if 'AWS_ACCESS_KEY_ID' in os.environ and 'AWS_SECRET_ACCESS_KEY' in os.environ:
 def extension_allowed(key: str, allowed_extension: list[str]):
   if '.' in key:
     extension = key.split('.')[-1]
-    if not extension in allowed_extension:
+    if extension not in allowed_extension:
       return {'status': 'ko', 'error': 'Invalid file extension'}
   else:
     return {

@@ -63,7 +63,7 @@ def create_stripe_session_(params: PaymentRequest):
   except stripe.error.StripeError as e:
     traceback.print_exc()
     return {'status': 'ko', 'message': str(e)}
-  except Exception as e:
+  except Exception:
     traceback.print_exc()
     return {'status': 'ko', 'message': 'Qualcosa è andato storto'}
 
