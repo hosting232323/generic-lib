@@ -5,7 +5,7 @@ from werkzeug.utils import secure_filename
 from .porting import data_export
 from api.storage import upload_file_to_s3, delete_file_from_s3, list_files_in_s3
 
-  
+
 def db_backup(db_url: str, sub_folder: str):
   zip_filename = data_export(db_url)
   s3_bucket = 'fastsite-postgres-backup'
@@ -20,11 +20,11 @@ def db_backup(db_url: str, sub_folder: str):
 
 
 def manage_s3_backups(bucket: str, sub_folder: str):
-  backups = list_files_in_s3(bucket, sub_folder)  
+  backups = list_files_in_s3(bucket, sub_folder)
   backups.sort()
   backup_days = int(os.environ.get('POSTGRES_BACKUP_DAYS', 14))
 
   if len(backups) > backup_days:
-    files_to_delete = backups[:len(backups) - backup_days]
+    files_to_delete = backups[: len(backups) - backup_days]
     for file_key in files_to_delete:
       delete_file_from_s3(bucket, file_key)

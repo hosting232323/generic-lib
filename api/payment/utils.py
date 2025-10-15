@@ -13,8 +13,8 @@ def setup_stripe_products(products: list):
             'price_data': {
               'currency': 'eur',
               'unit_amount': element['price'],
-              'product_data': {'name': element['name']}
-            }
+              'product_data': {'name': element['name']},
+            },
           }
         )
   return stripe_products
