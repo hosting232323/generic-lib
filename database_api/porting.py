@@ -9,7 +9,7 @@ def data_export(db_url: str):
   subprocess.run([
     'pg_dump', f'--dbname={db_url}',
     '--blobs', '--clean', '-Fc',
-    '-f', filename
+    '--verbose', '-f', filename
   ], check=True)
   return filename
 
@@ -23,5 +23,5 @@ def data_import(db_url: str, file_path: str):
     'pg_restore', f'--dbname={db_url}',
     '--verbose', '--clean',
     '--if-exists', '--no-privileges',
-    file_path
+    '--no-owner', file_path
   ], check=True)
