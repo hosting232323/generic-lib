@@ -3,7 +3,7 @@ import sys
 from .mailer import spam_mail_main
 from .mismatch_files import run_comparison
 from .project_setup import main as setup_project_main
-from database_api.porting import data_export, data_import
+from database_api.backup import data_export, data_import
 
 
 def check_aws_mismatch():
