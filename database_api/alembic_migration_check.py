@@ -21,9 +21,7 @@ def exists_alembic_table(engine: Engine) -> bool:
 
 def get_current_alembic_version(Session) -> str:
   with Session() as session:
-    return session.execute(text(
-      'SELECT version_num FROM alembic_version'
-    )).scalar()
+    return session.execute(text('SELECT version_num FROM alembic_version')).scalar()
 
 
 def get_migration_files():
@@ -52,8 +50,7 @@ def get_last_version(migrations) -> str:
 def force_last_version(engine: Engine, last_version: str):
   metadata = MetaData()
   alembic_version = Table(
-    'alembic_version', metadata,
-    Column('version_num', String(32), primary_key=True, nullable=False)
+    'alembic_version', metadata, Column('version_num', String(32), primary_key=True, nullable=False)
   )
   metadata.create_all(engine)
   with engine.connect() as connection:

@@ -20,14 +20,10 @@ class User(BaseEntity):
 def get_user_by_email(email: str) -> User:
   sub_class = User.__subclasses__()[0]
   with Session() as session:
-    return session.query(sub_class).filter(
-      sub_class.email == email
-    ).first()
+    return session.query(sub_class).filter(sub_class.email == email).first()
 
 
 def get_user_by_pass_token(pass_token: str) -> User:
   sub_class = User.__subclasses__()[0]
   with Session() as session:
-    return session.query(sub_class).filter(
-      sub_class.pass_token == pass_token
-    ).first()
+    return session.query(sub_class).filter(sub_class.pass_token == pass_token).first()

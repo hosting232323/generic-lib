@@ -30,7 +30,7 @@ def send_email(receiver_email: str, body, subject: str):
       server.login(EMAIL_SENDER['address'], EMAIL_SENDER['password'])
       server.sendmail(EMAIL_SENDER['address'], receiver_email, message.as_string())
   except smtplib.SMTPDataError as e:
-    print(f'Errore nell\'invio della mail: {e}')
+    print(f"Errore nell'invio della mail: {e}")
   except smtplib.SMTPException as e:
     print(f'Errore generico SMTP: {e}')
   except Exception as e:
