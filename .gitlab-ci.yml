@@ -5,5 +5,5 @@ lint:
   stage: lint
   image: hosting23232323/python-node:3.11
   script:
-    - ruff check ./api ./console_scripts ./database_api --exit-non-zero-on-fix
-    - ruff format ./api ./console_scripts ./database_api --exit-non-zero-on-fix
+    - ruff check . --exit-non-zero-on-fix
+    - ruff format . --exit-non-zero-on-fix
