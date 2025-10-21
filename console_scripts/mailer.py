@@ -2,6 +2,7 @@ import sys
 import time
 from api.email import send_email
 
+
 def spam_mail_main():
   content_path = sys.argv[1]
   contact_path = sys.argv[2]
@@ -39,14 +40,10 @@ def spam_mail_main():
       for key, value in contact.items():
         personalized_email = personalized_email.replace(f'[{key}]', value if value else '')
 
-        send_email(
-          receiver_email=email,
-          body=personalized_email,
-          subject='Scopri i nostri servizi!'
-        )
+        send_email(receiver_email=email, body=personalized_email, subject='Scopri i nostri servizi!')
         print(f'✅ Email inviata con successo a: {email} ({i}/{len(contacts_list)})')
 
         # Imposta un ritardo tra le email per evitare il blocco dello spam
         time.sleep(5)
     except Exception as e:
-      print(f'❌ Errore nell\'invio a {email}: {e}')
+      print(f"❌ Errore nell'invio a {email}: {e}")

@@ -5,10 +5,12 @@ from api.storage import list_files_in_s3
 
 
 def get_user_input():
-  return input('Inserisci l\'URL del database: '), \
-    input('Inserisci la query per ottenere i file: '), \
-    input('Inserisci il nome del bucket S3: '), \
-    input('Folder selezionato: (None, prod, test) (default: None): ') or 'None'
+  return (
+    input("Inserisci l'URL del database: "),
+    input('Inserisci la query per ottenere i file: '),
+    input('Inserisci il nome del bucket S3: '),
+    input('Folder selezionato: (None, prod, test) (default: None): ') or 'None',
+  )
 
 
 def parse_is_dev(folder_input):
@@ -35,7 +37,7 @@ def get_s3_files(bucket_name, is_dev=None):
     folder_prefix = 'test/' if is_dev else 'prod/'
   return {os.path.basename(url) for url in list_files_in_s3(bucket_name, folder=folder_prefix)}
 
- 
+
 def run_comparison():
   db_url, query, bucket_name, folder_input = get_user_input()
   db_files = get_db_files(db_url, query)

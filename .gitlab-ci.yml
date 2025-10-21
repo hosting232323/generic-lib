@@ -1,0 +1,10 @@
+stages:
+  - lint
+image: python:3.11
+
+lint:
+  stage: lint
+  script:
+    - pip install ruff
+    - ruff check . --exit-non-zero-on-fix
+    - ruff format . --exit-non-zero-on-fix
