@@ -1,9 +1,9 @@
 stages:
   - lint
+image: python:3.11
 
 lint:
   stage: lint
-  image: hosting23232323/python-node:3.11
   script:
     - pip install ruff
     - ruff check . --exit-non-zero-on-fix
