@@ -1,21 +1,40 @@
 from . import Session
 
 
-def create(class_type, params):
-  with Session() as session:
+def create(class_type, params, session=None):
+  external_session = session is not None
+  if not external_session:
+    with Session() as session:
+      new_instance = class_type(**params)
+      session.add(new_instance)
+      session.commit()
+      session.refresh(new_instance)
+      return new_instance
+  else:
     new_instance = class_type(**params)
     session.add(new_instance)
-    session.commit()
+    session.flush()
     session.refresh(new_instance)
     return new_instance
 
 
-def create_bulk(class_type, params_list):
-  with Session() as session:
-    new_instances = [class_type(**params) for params in params_list]
-    session.bulk_save_objects(new_instances)
-    session.commit()
-    return new_instances
+def update(instance, update_params, session=None):
+  external_session = session is not None
+  if not external_session:
+    with Session() as session:
+        updated_instance = session.merge(instance)
+        for key, value in update_params.items():
+          setattr(updated_instance, key, value)
+        session.commit()
+        session.refresh(updated_instance)
+        return updated_instance
+  else:
+    updated_instance = session.merge(instance)
+    for key, value in update_params.items():
+      setattr(updated_instance, key, value)
+    session.flush()
+    session.refresh(updated_instance)
+    return updated_instance
 
 
 def update(instance, update_params):
