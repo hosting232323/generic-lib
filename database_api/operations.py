@@ -1,21 +1,29 @@
+from sqlalchemy.orm import Session as session_type
+
 from . import Session
 
 
-def create(class_type, params, session=None):
-  external_session = session is not None
-  if not external_session:
+def db_session_decorator(func):
+  def wrapper(*args, **kwargs):
+    if 'session' in kwargs and kwargs['session'] is not None:
+      return func(*args, **kwargs)
+
     with Session() as session:
-      new_instance = class_type(**params)
-      session.add(new_instance)
+      response = func(*args, session=session, **kwargs)
       session.commit()
-      session.refresh(new_instance)
-      return new_instance
-  else:
-    new_instance = class_type(**params)
-    session.add(new_instance)
-    session.flush()
-    session.refresh(new_instance)
-    return new_instance
+      return response
+
+  wrapper.__name__ = func.__name__
+  return wrapper
+
+
+@db_session_decorator
+def create(class_type, params, session: session_type):
+  new_instance = class_type(**params)
+  session.add(new_instance)
+  session.flush()
+  session.refresh(new_instance)
+  return new_instance
 
 
 def update(instance, update_params, session=None):
