@@ -21,7 +21,7 @@ def db_session_decorator(commit=True):
   return decorator
 
 
-@db_session_decorator
+@db_session_decorator(commit=True)
 def create(class_type, params, session: session_type = None):
   new_instance = class_type(**params)
   session.add(new_instance)
@@ -30,7 +30,7 @@ def create(class_type, params, session: session_type = None):
   return new_instance
 
 
-@db_session_decorator
+@db_session_decorator(commit=True)
 def create_bulk(class_type, params_list, session: session_type = None):
   new_instances = [class_type(**params) for params in params_list]
   session.bulk_save_objects(new_instances)
@@ -38,7 +38,7 @@ def create_bulk(class_type, params_list, session: session_type = None):
   return new_instances
 
 
-@db_session_decorator
+@db_session_decorator(commit=True)
 def update(instance, update_params, session: session_type = None):
   updated_instance = session.merge(instance)
   for key, value in update_params.items():
@@ -48,7 +48,7 @@ def update(instance, update_params, session: session_type = None):
   return updated_instance
 
 
-@db_session_decorator
+@db_session_decorator(commit=True)
 def update_bulk(instances, update_params_list, session: session_type = None):
   updated_instances = session.merge(instances)
   for updated_instance, update_params in zip(updated_instances, update_params_list):
@@ -58,13 +58,13 @@ def update_bulk(instances, update_params_list, session: session_type = None):
   return updated_instances
 
 
-@db_session_decorator
+@db_session_decorator(commit=True)
 def delete(instance, session: session_type = None):
   session.delete(instance)
   session.commit()
 
 
-@db_session_decorator
+@db_session_decorator(commit=True)
 def delete_bulk(instances, session: session_type = None):
   for instance in instances:
     session.delete(instance)
