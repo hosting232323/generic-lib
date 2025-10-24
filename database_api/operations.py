@@ -3,21 +3,24 @@ from sqlalchemy.orm import Session as session_type
 from . import Session
 
 
-def db_session_decorator(commit=True):
+def db_session_decorator(commit=False):
   def decorator(func):
     def wrapper(*args, **kwargs):
       if 'session' in kwargs and kwargs['session'] is not None:
         return func(*args, **kwargs)
 
       with Session() as session:
-        response = func(*args, session=session, **kwargs)
-        if commit:
-          session.commit()
-        return response
+        try:
+          result = func(*args, session=session, **kwargs)
+          if commit:
+            session.commit()
+          return result
+        except Exception:
+          session.rollback()
+          raise
 
     wrapper.__name__ = func.__name__
     return wrapper
-
   return decorator
 
 
@@ -61,7 +64,6 @@ def update_bulk(instances, update_params_list, session: session_type = None):
 @db_session_decorator(commit=True)
 def delete(instance, session: session_type = None):
   session.delete(instance)
-  session.commit()
 
 
 @db_session_decorator(commit=True)
