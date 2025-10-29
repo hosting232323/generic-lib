@@ -21,6 +21,7 @@ def db_session_decorator(commit=False):
 
     wrapper.__name__ = func.__name__
     return wrapper
+
   return decorator
 
 
@@ -45,24 +46,22 @@ def create_bulk(class_type, params_list, session: session_type = None):
 
 @db_session_decorator(commit=True)
 def update(instance, update_params, session: session_type = None):
-  updated_instance = session.merge(instance)
   for key, value in update_params.items():
-    setattr(updated_instance, key, value)
+    setattr(instance, key, value)
   session.flush()
-  session.refresh(updated_instance)
-  return updated_instance
+  session.refresh(instance)
+  return instance
 
 
 @db_session_decorator(commit=True)
 def update_bulk(instances, update_params_list, session: session_type = None):
-  updated_instances = [session.merge(obj) for obj in instances]
-  for updated_instance, update_params in zip(updated_instances, update_params_list):
+  for instance, update_params in zip(instances, update_params_list):
     for key, value in update_params.items():
-      setattr(updated_instance, key, value)
+      setattr(instance, key, value)
   session.flush()
-  for obj in updated_instances:
-    session.refresh(obj)  
-  return updated_instances
+  for obj in instances:
+    session.refresh(obj)
+  return instances
 
 
 @db_session_decorator(commit=True)
@@ -74,7 +73,6 @@ def delete(instance, session: session_type = None):
 def delete_bulk(instances, session: session_type = None):
   for instance in instances:
     session.delete(instance)
-  session.flush()
 
 
 @db_session_decorator(commit=False)
