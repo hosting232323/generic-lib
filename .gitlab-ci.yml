@@ -1,6 +1,6 @@
 stages:
   - lint
-image: python:3.11
+image: hosting23232323/python-node:3.11
 
 lint:
   stage: lint
