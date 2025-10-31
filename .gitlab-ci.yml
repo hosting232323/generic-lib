@@ -1,6 +1,6 @@
 stages:
   - lint
-image: python-node:3.11
+image: python:3.11
 
 lint:
   stage: lint
