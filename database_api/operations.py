@@ -1,71 +1,91 @@
+from sqlalchemy.orm import Session as session_type
+
 from . import Session
 
 
-def create(class_type, params):
-  with Session() as session:
-    new_instance = class_type(**params)
-    session.add(new_instance)
-    session.commit()
-    session.refresh(new_instance)
-    return new_instance
+def db_session_decorator(commit=False):
+  def decorator(func):
+    def wrapper(*args, **kwargs):
+      if 'session' in kwargs and kwargs['session'] is not None:
+        return func(*args, **kwargs)
+
+      with Session() as session:
+        result = func(*args, session=session, **kwargs)
+        if commit:
+          session.commit()
+        return result
+
+    wrapper.__name__ = func.__name__
+    return wrapper
+
+  return decorator
 
 
-def create_bulk(class_type, params_list):
-  with Session() as session:
-    new_instances = [class_type(**params) for params in params_list]
-    session.bulk_save_objects(new_instances)
-    session.commit()
-    return new_instances
+@db_session_decorator(commit=True)
+def create(class_type, params, session: session_type = None):
+  new_instance = class_type(**params)
+  session.add(new_instance)
+  session.flush()
+  session.refresh(new_instance)
+  return new_instance
 
 
-def update(instance, update_params):
-  with Session() as session:
-    updated_instance = session.merge(instance)
+@db_session_decorator(commit=True)
+def create_bulk(class_type, params_list, session: session_type = None):
+  new_instances = [class_type(**params) for params in params_list]
+  session.add_all(new_instances)
+  session.flush()
+  for obj in new_instances:
+    session.refresh(obj)
+  return new_instances
+
+
+@db_session_decorator(commit=True)
+def update(instance, update_params, session: session_type = None):
+  for key, value in update_params.items():
+    setattr(instance, key, value)
+  session.flush()
+  session.refresh(instance)
+  return instance
+
+
+@db_session_decorator(commit=True)
+def update_bulk(instances, update_params_list, session: session_type = None):
+  for instance, update_params in zip(instances, update_params_list):
     for key, value in update_params.items():
-      setattr(updated_instance, key, value)
-    session.commit()
-    session.refresh(updated_instance)
-    return updated_instance
+      setattr(instance, key, value)
+  session.flush()
+  for obj in instances:
+    session.refresh(obj)
+  return instances
 
 
-def update_bulk(instances, update_params_list):
-  with Session() as session:
-    updated_instances = session.merge(instances)
-    for updated_instance, update_params in zip(updated_instances, update_params_list):
-      for key, value in update_params.items():
-        setattr(updated_instance, key, value)
-    session.commit()
-    return updated_instances
+@db_session_decorator(commit=True)
+def delete(instance, session: session_type = None):
+  session.delete(instance)
 
 
-def delete(instance):
-  with Session() as session:
+@db_session_decorator(commit=True)
+def delete_bulk(instances, session: session_type = None):
+  for instance in instances:
     session.delete(instance)
-    session.commit()
 
 
-def delete_bulk(instances):
-  with Session() as session:
-    for instance in instances:
-      session.delete(instance)
-    session.commit()
+@db_session_decorator(commit=False)
+def get_by_id(class_type, instance_id, session: session_type = None):
+  return session.query(class_type).filter(class_type.id == instance_id).first()
 
 
-def get_by_id(class_type, instance_id):
-  with Session() as session:
-    return session.query(class_type).filter(class_type.id == instance_id).first()
+@db_session_decorator(commit=False)
+def get_by_ids(class_type, instance_ids, session: session_type = None):
+  return session.query(class_type).filter(class_type.id.in_(instance_ids)).all()
 
 
-def get_by_ids(class_type, instance_ids):
-  with Session() as session:
-    return session.query(class_type).filter(class_type.id.in_(instance_ids)).all()
+@db_session_decorator(commit=False)
+def get_all(class_type, session: session_type = None):
+  return session.query(class_type).all()
 
 
-def get_all(class_type):
-  with Session() as session:
-    return session.query(class_type).all()
-
-
-def get_by_params(class_type, params_list):
-  with Session() as session:
-    return session.query(class_type).filter(*[getattr(class_type, key) == value for key, value in params_list]).all()
+@db_session_decorator(commit=False)
+def get_by_params(class_type, params_list, session: session_type = None):
+  return session.query(class_type).filter(*[getattr(class_type, key) == value for key, value in params_list]).all()

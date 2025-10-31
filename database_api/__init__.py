@@ -28,9 +28,10 @@ def Session():
   session = sessionmaker(bind=engine)()
   try:
     yield session
-  except Exception:
+  except Exception as e:
     traceback.print_exc()
     session.rollback()
+    raise e
   finally:
     session.close()
 
