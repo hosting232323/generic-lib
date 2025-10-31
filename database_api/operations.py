@@ -10,14 +10,10 @@ def db_session_decorator(commit=False):
         return func(*args, **kwargs)
 
       with Session() as session:
-        try:
-          result = func(*args, session=session, **kwargs)
-          if commit:
-            session.commit()
-          return result
-        except Exception:
-          session.rollback()
-          raise
+        result = func(*args, session=session, **kwargs)
+        if commit:
+          session.commit()
+        return result
 
     wrapper.__name__ = func.__name__
     return wrapper
