@@ -50,14 +50,12 @@ def update(instance, update_params: dict, session: session_type = None):
 
 @db_session_decorator(commit=True)
 def update_bulk(instances, update_params_list: list[dict], session: session_type = None):
-  merged_instances = [session.merge(i) for i in instances]
-  for instance, update_params in zip(merged_instances, update_params_list):
+  for instance, update_params in zip(instances, update_params_list):
+    instance = session.merge(instance)
     for key, value in update_params.items():
       setattr(instance, key, value)
   session.flush()
-  for obj in merged_instances:
-    session.refresh(obj)
-  return merged_instances
+  return [session.refresh(obj) for obj in instances]
 
 
 @db_session_decorator(commit=True)
