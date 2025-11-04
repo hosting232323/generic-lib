@@ -40,6 +40,7 @@ def create_bulk(class_type, params_list, session: session_type = None):
 
 @db_session_decorator(commit=True)
 def update(instance, update_params: dict, session: session_type = None):
+  instance = session.merge(instance)
   for key, value in update_params.items():
     setattr(instance, key, value)
   session.flush()
@@ -50,6 +51,7 @@ def update(instance, update_params: dict, session: session_type = None):
 @db_session_decorator(commit=True)
 def update_bulk(instances, update_params_list: list[dict], session: session_type = None):
   for instance, update_params in zip(instances, update_params_list):
+    instance = session.merge(instance)
     for key, value in update_params.items():
       setattr(instance, key, value)
   session.flush()
