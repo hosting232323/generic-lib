@@ -25,7 +25,7 @@ def set_database(url: str):
 def Session():
   if engine is None:
     raise Exception('Database engine not initialized')
-  session = sessionmaker(bind=engine)()
+  session = sessionmaker(bind=engine, expire_on_commit=False)()
   try:
     yield session
   except Exception as e:
