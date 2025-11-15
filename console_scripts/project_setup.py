@@ -4,9 +4,7 @@ import requests
 
 
 def main():
-  response = requests.get(
-    f'https://strong-box.app/generic-be/setup-project?project_type={sys.argv[1]}'
-  ).json()
+  response = requests.get(f'https://strong-box.app/generic-be/setup-project?project_type={sys.argv[1]}').json()
   if response['status'] == 'ko':
     raise Exception(response['error'])
 
