@@ -4,21 +4,18 @@ from flask import request
 import requests
 
 
-def error_catching_decorator(topic):
-  def decorator(func):
-    def wrapper(*args, **kwargs):
-      try:
-        return func(*args, **kwargs)
-      except Exception:
-        error_trace = traceback.format_exc()
-        print(error_trace)
-        requests.post(f'{os.environ["TELEGRAM_ALERT"]}/alert', json={'topic': topic, 'trace': error_trace})
-        return {'status': 'ko', 'message': 'Errore generico'}
+def error_catching_decorator(func):
+  def wrapper(*args, **kwargs):
+    try:
+      return func(*args, **kwargs)
+    except Exception:
+      error_trace = traceback.format_exc()
+      print(error_trace)
+      requests.post(f'{os.environ["TELEGRAM_ALERT"]}/alert', json={'topic': os.environ["PROJECT_NAME"], 'trace': error_trace})
+      return {'status': 'ko', 'message': 'Errore generico'}
 
-    wrapper.__name__ = func.__name__
-    return wrapper
-
-  return decorator
+  wrapper.__name__ = func.__name__
+  return wrapper
 
 
 def swagger_decorator(func):
