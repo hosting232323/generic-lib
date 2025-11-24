@@ -12,12 +12,14 @@ def error_catching_decorator(topic):
       except Exception:
         error_trace = traceback.format_exc()
         print(error_trace)
-        requests.post(f"{os.environ['TELEGRAM_ALERT']}/alert", json={"topic": topic, "trace": error_trace})
+        requests.post(f'{os.environ["TELEGRAM_ALERT"]}/alert', json={'topic': topic, 'trace': error_trace})
         return {'status': 'ko', 'message': 'Errore generico'}
 
     wrapper.__name__ = func.__name__
     return wrapper
+
   return decorator
+
 
 def swagger_decorator(func):
   def wrapper(*args, **kwargs):
