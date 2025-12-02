@@ -1,39 +1,18 @@
 import os
 import traceback
 from flask import request
-import requests
-from telegram import Bot
+
+from .telegram import send_telegram_error
 
 IS_DEV = int(os.environ.get('IS_DEV', 1)) == 1
-bot = Bot(os.environ['TELEGRAM_TOKEN'])
-CHAT_ID = -1003410500390
-topic = {
-  "default": 4294967297,
-  "wooffy-be": 4294967352,
-  "italco-be": 4294967355,
-  "chatty-be": 4294967354,
-  "generic-be": 4294967350,
-  "strongbox-be": 4294967353,
-  "generic-booking": 4294967351
-}
-thread_id = topic[os.environ.get("PROJECT_NAME", 'default')]
 
 def error_catching_decorator(func):
   def wrapper(*args, **kwargs):
     try:
       return func(*args, **kwargs)
     except Exception:
-      error_trace = traceback.format_exc()
-      print(error_trace)
-      if not IS_DEV:
-        bot.send_message(
-          chat_id=CHAT_ID,
-          text=error_trace,
-          message_thread_id=thread_id,
-          parse_mode="Markdown"
-        )
-
-      requests.post(f'{os.environ["TELEGRAM_ALERT"]}/alert', json={'topic': os.environ["PROJECT_NAME"], 'trace': error_trace})
+      traceback.print_exc()
+      send_telegram_error(traceback.format_exc())
       return {'status': 'ko', 'message': 'Errore generico'}
 
   wrapper.__name__ = func.__name__
