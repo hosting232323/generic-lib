@@ -4,7 +4,6 @@ from flask import request
 
 from .telegram import send_telegram_error
 
-IS_DEV = int(os.environ.get('IS_DEV', 1)) == 1
 
 def error_catching_decorator(func):
   def wrapper(*args, **kwargs):

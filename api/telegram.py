@@ -2,9 +2,9 @@ import os
 import asyncio
 import threading
 from telegram import Bot
-from . import IS_DEV
 
 bot = Bot(os.environ['TELEGRAM_TOKEN'])
+IS_DEV = int(os.environ.get('IS_DEV', 1)) == 1
 PROJECT_NAME = os.environ.get('PROJECT_NAME', 'default')
 
 CHAT_ID = -1003410500390
