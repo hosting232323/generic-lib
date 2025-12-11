@@ -2,7 +2,9 @@ import os
 import boto3
 import botocore
 from flask import abort
+from datetime import datetime
 from dotenv import load_dotenv
+from werkzeug.utils import secure_filename
 
 
 load_dotenv()
@@ -79,3 +81,55 @@ def list_files_in_s3(bucket, folder=''):
     else:
       break
   return files
+
+
+def db_backup_s3(zip_filename: str, sub_folder):
+  s3_bucket = 'fastsite-postgres-backup'
+  s3_key = f'{sub_folder}/{secure_filename(zip_filename)}'
+
+  with open(zip_filename, 'rb') as file:
+    upload_file_to_s3(file, s3_bucket, s3_key)
+  os.remove(zip_filename)
+  manage_s3_backups(s3_bucket, sub_folder)
+
+  print(f'[{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}] Backup eseguito!')
+
+
+def db_backup_local(zip_filename: str, folder):
+  safe_name = secure_filename(zip_filename)
+  
+  os.makedirs(folder, exist_ok=True)
+  dest_path = os.path.join(folder, safe_name)
+
+  os.rename(zip_filename, dest_path)
+  manage_local_backups(folder)
+  
+  print(f'[{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}] Backup eseguito!')
+
+
+def manage_local_backups(local_folder: str):
+  backups = [
+    os.path.join(local_folder, f)
+    for f in os.listdir(local_folder)
+    if os.path.isfile(os.path.join(local_folder, f))
+  ]
+    
+  backups.sort()
+    
+  backup_days = int(os.environ.get('POSTGRES_BACKUP_DAYS', 14))
+
+  if len(backups) > backup_days:
+    files_to_delete = backups[: len(backups) - backup_days]
+    for path in files_to_delete:
+      os.remove(path)
+
+
+def manage_s3_backups(bucket: str, sub_folder: str):
+  backups = list_files_in_s3(bucket, sub_folder)
+  backups.sort()
+  backup_days = int(os.environ.get('POSTGRES_BACKUP_DAYS', 14))
+
+  if len(backups) > backup_days:
+    files_to_delete = backups[: len(backups) - backup_days]
+    for file_key in files_to_delete:
+      delete_file_from_s3(bucket, file_key)

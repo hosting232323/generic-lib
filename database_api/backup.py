@@ -2,9 +2,8 @@ import os
 import sys
 import subprocess
 from datetime import datetime
-from werkzeug.utils import secure_filename
 
-from api.storage import upload_file_to_s3, delete_file_from_s3, list_files_in_s3
+from api.storage import db_backup_s3, db_backup_local
 
 
 def data_export(db_url: str):
@@ -35,55 +34,9 @@ def data_import(db_url: str, filename: str):
   )
 
 
-def db_backup_local(db_url: str, local_folder: str):
+def db_backup(db_url: str, folder: str, storage):
   zip_filename = data_export(db_url)
-  safe_name = secure_filename(zip_filename)
-
-  os.makedirs(local_folder, exist_ok=True)
-  dest_path = os.path.join(local_folder, safe_name)
-
-  os.rename(zip_filename, dest_path)
-  manage_local_backups(local_folder)
-  
-  print(f'[{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}] Backup eseguito!')
-  
-
-def manage_local_backups(local_folder: str):
-  backups = [
-    os.path.join(local_folder, f)
-    for f in os.listdir(local_folder)
-    if os.path.isfile(os.path.join(local_folder, f))
-  ]
-    
-  backups.sort()
-    
-  backup_days = int(os.environ.get('POSTGRES_BACKUP_DAYS', 14))
-
-  if len(backups) > backup_days:
-    files_to_delete = backups[: len(backups) - backup_days]
-    for path in files_to_delete:
-      os.remove(path)
-
-
-def db_backup(db_url: str, sub_folder: str):
-  zip_filename = data_export(db_url)
-  s3_bucket = 'fastsite-postgres-backup'
-  s3_key = f'{sub_folder}/{secure_filename(zip_filename)}'
-
-  with open(zip_filename, 'rb') as file:
-    upload_file_to_s3(file, s3_bucket, s3_key)
-  os.remove(zip_filename)
-  manage_s3_backups(s3_bucket, sub_folder)
-
-  print(f'[{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}] Backup eseguito!')
-
-
-def manage_s3_backups(bucket: str, sub_folder: str):
-  backups = list_files_in_s3(bucket, sub_folder)
-  backups.sort()
-  backup_days = int(os.environ.get('POSTGRES_BACKUP_DAYS', 14))
-
-  if len(backups) > backup_days:
-    files_to_delete = backups[: len(backups) - backup_days]
-    for file_key in files_to_delete:
-      delete_file_from_s3(bucket, file_key)
+  if storage == 'hdd':
+    db_backup_local(zip_filename, folder)
+  elif storage == 's3':
+    db_backup_s3(zip_filename, folder)
