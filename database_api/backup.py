@@ -35,6 +35,36 @@ def data_import(db_url: str, filename: str):
   )
 
 
+def db_backup_local(db_url: str, local_folder: str):
+  zip_filename = data_export(db_url)
+  safe_name = secure_filename(zip_filename)
+
+  os.makedirs(local_folder, exist_ok=True)
+  dest_path = os.path.join(local_folder, safe_name)
+
+  os.rename(zip_filename, dest_path)
+  manage_local_backups(local_folder)
+  
+  print(f'[{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}] Backup eseguito!')
+  
+
+def manage_local_backups(local_folder: str):
+  backups = [
+    os.path.join(local_folder, f)
+    for f in os.listdir(local_folder)
+    if os.path.isfile(os.path.join(local_folder, f))
+  ]
+    
+  backups.sort()
+    
+  backup_days = int(os.environ.get('POSTGRES_BACKUP_DAYS', 14))
+
+  if len(backups) > backup_days:
+    files_to_delete = backups[: len(backups) - backup_days]
+    for path in files_to_delete:
+      os.remove(path)
+
+
 def db_backup(db_url: str, sub_folder: str):
   zip_filename = data_export(db_url)
   s3_bucket = 'fastsite-postgres-backup'
