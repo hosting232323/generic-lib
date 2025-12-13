@@ -101,7 +101,7 @@ def upload_file(storage_type, file_path, folder):
     with open(file_path, 'rb') as f:
       upload_file_to_s3(f, s3_bucket, s3_key)
   elif storage_type == 'local':
-  dest_path = os.path.join(folder, filename)
+    dest_path = os.path.join(folder, filename)
     os.makedirs(folder, exist_ok=True)
     os.rename(file_path, dest_path)
 
