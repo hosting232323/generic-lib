@@ -83,44 +83,6 @@ def list_files_in_s3(bucket, folder=''):
   return files
 
 
-def db_backup_s3(zip_filename: str, sub_folder):
-  s3_bucket = 'fastsite-postgres-backup'
-  s3_key = f'{sub_folder}/{secure_filename(zip_filename)}'
-
-  with open(zip_filename, 'rb') as file:
-    upload_file_to_s3(file, s3_bucket, s3_key)
-  os.remove(zip_filename)
-  manage_s3_backups(s3_bucket, sub_folder)
-
-  print(f'[{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}] Backup eseguito!')
-
-
-def manage_local_backups(local_folder: str):
-  backups = [
-    os.path.join(local_folder, f) for f in os.listdir(local_folder) if os.path.isfile(os.path.join(local_folder, f))
-  ]
-
-  backups.sort()
-
-  backup_days = int(os.environ.get('POSTGRES_BACKUP_DAYS', 14))
-
-  if len(backups) > backup_days:
-    files_to_delete = backups[: len(backups) - backup_days]
-    for path in files_to_delete:
-      os.remove(path)
-
-
-def manage_s3_backups(bucket: str, sub_folder: str):
-  backups = list_files_in_s3(bucket, sub_folder)
-  backups.sort()
-  backup_days = int(os.environ.get('POSTGRES_BACKUP_DAYS', 14))
-
-  if len(backups) > backup_days:
-    files_to_delete = backups[: len(backups) - backup_days]
-    for file_key in files_to_delete:
-      delete_file_from_s3(bucket, file_key)
-
-
 def get_all_filenames(storage_type, folder, bucket=None, local_folder=None):
   if storage_type == 's3':
     return list_files_in_s3(bucket, folder)
@@ -131,14 +93,16 @@ def get_all_filenames(storage_type, folder, bucket=None, local_folder=None):
     return sorted([f for f in os.listdir(full_path) if os.path.isfile(os.path.join(full_path, f))])
 
 
-def upload_file(storage_type, file_path, key, bucket=None, local_folder=None):
+def upload_file(storage_type, file_path, folder):
+  s3_bucket = 'fastsite-postgres-backup'
+  s3_key = f'{folder}/{secure_filename(file_path)}'
   if storage_type == 's3':
     with open(file_path, 'rb') as f:
-      upload_file_to_s3(f, bucket, key)
+      upload_file_to_s3(f, s3_bucket, s3_key)
   elif storage_type == 'local':
-    dest_folder = os.path.dirname(os.path.join(local_folder, key))
+    dest_folder = os.path.dirname(os.path.join(folder, s3_key))
     os.makedirs(dest_folder, exist_ok=True)
-    os.rename(file_path, os.path.join(local_folder, key))
+    os.rename(file_path, os.path.join(folder, s3_key))
 
 
 def delete_file(storage_type, key, bucket=None, local_folder=None):
