@@ -3,7 +3,8 @@ import sys
 import subprocess
 from datetime import datetime
 
-from api.storage import db_backup_s3, db_backup_local
+from api.storage import upload_file, manage_backups
+from werkzeug.utils import secure_filename
 
 
 def data_export(db_url: str):
@@ -34,9 +35,11 @@ def data_import(db_url: str, filename: str):
   )
 
 
-def db_backup(db_url: str, folder: str, storage):
+def db_backup(db_url: str, folder: str, storage_type):
   zip_filename = data_export(db_url)
-  if storage == 'hdd':
-    db_backup_local(zip_filename, folder)
-  elif storage == 's3':
-    db_backup_s3(zip_filename, folder)
+
+  s3_bucket = 'fastsite-postgres-backup'
+  s3_key = f'{folder}/{secure_filename(zip_filename)}'
+
+  upload_file(storage_type, zip_filename, s3_key, bucket=s3_bucket, local_folder=folder)
+  manage_backups(storage_type, folder, bucket=s3_bucket, local_folder=folder)
