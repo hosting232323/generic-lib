@@ -94,15 +94,16 @@ def get_all_filenames(storage_type, folder, bucket=None, local_folder=None):
 
 
 def upload_file(storage_type, file_path, folder):
+  filename = secure_filename(os.path.basename(file_path))
   s3_bucket = 'fastsite-postgres-backup'
-  s3_key = f'{folder}/{secure_filename(file_path)}'
   if storage_type == 's3':
+    s3_key = f'{folder}/{filename}'    
     with open(file_path, 'rb') as f:
       upload_file_to_s3(f, s3_bucket, s3_key)
   elif storage_type == 'local':
-    dest_folder = os.path.dirname(os.path.join(folder, s3_key))
-    os.makedirs(dest_folder, exist_ok=True)
-    os.rename(file_path, os.path.join(folder, s3_key))
+  dest_path = os.path.join(folder, filename)
+    os.makedirs(folder, exist_ok=True)
+    os.rename(file_path, dest_path)
 
 
 def delete_file(storage_type, key, bucket=None, local_folder=None):
