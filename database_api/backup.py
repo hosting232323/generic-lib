@@ -38,4 +38,4 @@ def data_import(db_url: str, filename: str):
 def db_backup(db_url: str, folder: str, storage_type):
   zip_filename = data_export(db_url)
   upload_file(storage_type, zip_filename, folder)
-  manage_backups(storage_type, folder, bucket=s3_bucket, local_folder=folder)
+  manage_backups(storage_type, folder, local_folder=folder)
