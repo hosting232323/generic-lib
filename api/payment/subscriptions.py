@@ -1,9 +1,6 @@
-from dotenv import load_dotenv
-import stripe
 import uuid
 import time
-
-load_dotenv()
+import stripe
 
 
 def report_subscription_usage(stripe_api_key, customer_id, usage_value, event_name):

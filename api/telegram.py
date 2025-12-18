@@ -1,9 +1,10 @@
-import os
 import json
 import asyncio
 import threading
 from telegram import Bot
 from flask import request
+
+from .settings import IS_DEV, TELEGRAM_TOKEN, PROJECT_NAME
 
 
 CHAT_ID = -1003410500390
@@ -16,6 +17,7 @@ TELEGRAM_TOPIC = {
   'strongbox-be': 4294967353,
   'generic-booking': 4294967351,
 }
+
 
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
@@ -36,21 +38,19 @@ def escape_md(text: str) -> str:
 
 
 async def send_error(text):
-  await Bot(os.environ['TELEGRAM_TOKEN']).send_message(
+  await Bot(TELEGRAM_TOKEN).send_message(
     chat_id=CHAT_ID,
     text=text,
-    message_thread_id=TELEGRAM_TOPIC[os.environ.get('PROJECT_NAME', 'default')],
+    message_thread_id=TELEGRAM_TOPIC[PROJECT_NAME],
     parse_mode='MarkdownV2',
   )
 
 
-def send_telegram_error(trace: str, include_request: bool = False):
-  if int(os.environ.get('IS_DEV', 1)) == 1:
+def send_telegram_error(trace: str):
+  if IS_DEV or not TELEGRAM_TOKEN:
     return
 
-  message = f'*Errore:*\n```\n{trace}\n```'
-  if include_request:
-    message += f'\n\n*Request Data:*\n```\n{escape_md(extract_request_data())}\n```'
+  message = f'*Errore:*\n```\n{trace}\n```\n\n*Request Data:*\n```\n{escape_md(extract_request_data())}\n```'
   asyncio.run_coroutine_threadsafe(send_error(message), loop)
 
 

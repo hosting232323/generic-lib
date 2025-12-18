@@ -1,7 +1,7 @@
-import os
 import traceback
 from flask import request
 
+from .settings import SWAGGER_KEY
 from .telegram import send_telegram_error
 
 
@@ -20,10 +20,10 @@ def error_catching_decorator(func):
 
 def swagger_decorator(func):
   def wrapper(*args, **kwargs):
-    if (
-      'SwaggerAuthorization' not in request.headers
-      or request.headers['SwaggerAuthorization'] != os.environ['SWAGGER_KEY']
-    ):
+    if not SWAGGER_KEY:
+      return {'status': 'ko', 'message': 'Errore autenticazione'}
+
+    if 'SwaggerAuthorization' not in request.headers or request.headers['SwaggerAuthorization'] != SWAGGER_KEY:
       return {'status': 'ko', 'message': 'Autorizzazione negata'}
 
     return func(*args, **kwargs)

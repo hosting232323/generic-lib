@@ -1,10 +1,13 @@
-import sys
+import os
+from dotenv import load_dotenv
 
 
-hostname = (
-  'https://generic-be.replit.app/'
-  if '--production' in sys.argv
-  else 'http://127.0.0.1:8080/'
-  if '--local' in sys.argv
-  else 'https://generic-be-test.replit.app/'
-)
+load_dotenv()
+
+
+SWAGGER_KEY = os.environ.get('SWAGGER_KEY')
+IS_DEV = int(os.environ.get('IS_DEV', 1)) == 1
+TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
+AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
+PROJECT_NAME = os.environ.get('PROJECT_NAME', 'default')
+AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
