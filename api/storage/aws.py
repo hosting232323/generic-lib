@@ -71,17 +71,6 @@ def list_files_in_s3(bucket, folder=''):
   return files
 
 
-def download_file_from_s3(bucket_name, key, is_dev=None):
-  key = get_s3_key(key, is_dev)
-  try:
-    return S3.get_object(Bucket=bucket_name, Key=str(key))['Body'].read()
-  except botocore.exceptions.ClientError as e:
-    if e.response['Error']['Code'] == 'NoSuchKey':
-      raise abort(404)
-    else:
-      raise e
-
-
 def extension_allowed(key: str, allowed_extension: list[str]):
   if '.' in key:
     extension = key.split('.')[-1]
