@@ -1,13 +1,14 @@
+build
 SQLAlchemy
 alembic
-build
 requests
+python-dotenv
 flask
+flask_cors
 schedule
 tqdm
 PyJWT
 boto3
-apscheduler
 google-auth
 stripe
 python-telegram-bot
