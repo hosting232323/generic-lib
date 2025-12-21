@@ -6,7 +6,7 @@ def upload_file_local(content, filename, folder):
     file.write(content)
 
 
-def delete_file_local(folder, filename):
+def delete_file_local(filename, folder):
   os.remove(os.path.join(folder, filename))
 
 

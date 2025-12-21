@@ -36,7 +36,7 @@ def download_file_from_s3(bucket_name, key, is_dev=None):
 
 
 @storage_decorator
-def delete_file_from_s3(key, bucket_name, is_dev=None):
+def delete_file_from_s3(bucket_name, key, is_dev=None):
   key = get_s3_key(key, is_dev)
   S3.delete_object(Bucket=bucket_name, Key=key)
 

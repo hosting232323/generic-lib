@@ -11,7 +11,7 @@ def upload_file(content, filename, folder, storage_type):
 
 def delete_file(filename, folder, storage_type):
   if storage_type == 's3':
-    delete_file_from_s3(folder, filename)
+    delete_file_from_s3(filename, folder)
   elif storage_type == 'local':
     delete_file_local(folder, filename)
 
