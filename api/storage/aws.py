@@ -2,7 +2,7 @@ import boto3
 import botocore
 from flask import abort
 
-from ..settings import AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+from ..settings import AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, IS_DEV
 
 
 S3 = None
@@ -24,8 +24,8 @@ def storage_decorator(func):
 
 
 @storage_decorator
-def download_file_from_s3(bucket_name, key, is_dev=None):
-  key = get_s3_key(key, is_dev)
+def download_file_from_s3(bucket_name, key):
+  key = get_s3_key(key)
   try:
     return S3.get_object(Bucket=bucket_name, Key=str(key))['Body'].read()
   except botocore.exceptions.ClientError as e:
@@ -36,14 +36,14 @@ def download_file_from_s3(bucket_name, key, is_dev=None):
 
 
 @storage_decorator
-def delete_file_from_s3(bucket_name, key, is_dev=None):
-  key = get_s3_key(key, is_dev)
+def delete_file_from_s3(bucket_name, key):
+  key = get_s3_key(key)
   S3.delete_object(Bucket=bucket_name, Key=key)
 
 
 @storage_decorator
-def upload_file_to_s3(content, filename, bucket_name, allowed_extension=None, is_dev=None):
-  key = get_s3_key(filename, is_dev)
+def upload_file_to_s3(content, filename, bucket_name, allowed_extension=None):
+  key = get_s3_key(filename)
   if allowed_extension:
     check = extension_allowed(key, allowed_extension)
     if check['status'] == 'ko':
@@ -82,10 +82,10 @@ def extension_allowed(key: str, allowed_extension: list[str]):
   return {'status': 'ok'}
 
 
-def get_s3_key(key, is_dev):
-  if is_dev is None:
+def get_s3_key(key):
+  if IS_DEV is None:
     return key
-  elif is_dev:
+  elif IS_DEV:
     return f'test/{key}'
   else:
     return f'prod/{key}'
