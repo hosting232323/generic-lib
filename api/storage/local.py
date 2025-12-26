@@ -11,6 +11,4 @@ def delete_file_local(filename, folder):
 
 
 def list_files_local(folder):
-  return [
-    os.path.join(folder, file) for file in os.listdir(folder) if os.path.isfile(os.path.join(folder, file))
-  ]
+  return [os.path.join(folder, file) for file in os.listdir(folder) if os.path.isfile(os.path.join(folder, file))]
