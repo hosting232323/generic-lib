@@ -13,7 +13,7 @@ def delete_file(filename, folder, storage_type):
   if storage_type == 's3':
     delete_file_from_s3(filename, folder)
   elif storage_type == 'local':
-    delete_file_local(folder, filename)
+    delete_file_local(filename, folder)
 
 
 def get_all_filenames(folder, storage_type):

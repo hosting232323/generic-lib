@@ -6,7 +6,7 @@ from ..settings import AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, IS_DEV
 
 
 S3 = None
-
+S3_BUCKET = 'fastsite-postgres-backup'
 
 if AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY:
   S3 = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY_ID, aws_secret_access_key=AWS_SECRET_ACCESS_KEY)
@@ -42,22 +42,22 @@ def delete_file_from_s3(bucket_name, key):
 
 
 @storage_decorator
-def upload_file_to_s3(content, filename, bucket_name, allowed_extension=None):
-  key = get_s3_key(filename)
+def upload_file_to_s3(content, filename, folder, allowed_extension=None):
+  key = get_s3_key(f'{folder}/{filename}')
   if allowed_extension:
     check = extension_allowed(key, allowed_extension)
     if check['status'] == 'ko':
       raise ValueError(check['error'])
 
-  S3.upload_fileobj(content, bucket_name, key)
+  S3.upload_fileobj(content, S3_BUCKET, key)
 
 
 @storage_decorator
-def list_files_in_s3(bucket, folder=''):
+def list_files_in_s3(folder):
   files = []
   continuation_token = None
   while True:
-    list_params = {'Bucket': bucket, 'Prefix': folder}
+    list_params = {'Bucket': S3_BUCKET, 'Prefix': folder}
     if continuation_token:
       list_params['ContinuationToken'] = continuation_token
 
