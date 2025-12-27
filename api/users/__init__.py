@@ -41,7 +41,7 @@ def delete_user(email: str):
   return {'status': 'ok', 'message': 'Utente eliminato'}
 
 
-def login(email: str, password: str):
+def login(email: str, password: str, get_user=False):
   user: User = get_user_by_email(email)
   if not user:
     return {'status': 'ko', 'error': 'Utente non trovato'}
@@ -49,7 +49,11 @@ def login(email: str, password: str):
   if user.email != email or user.password != password:
     return {'status': 'ko', 'error': 'Credenziali errate'}
 
-  return {'status': 'ok', 'user_id': user.id, 'token': create_jwt_token(user.email)}
+  response = {'status': 'ok', 'token': create_jwt_token(user.email)}
+  if not get_user:
+    return response
+  else:
+    return response, user
 
 
 def ask_change_password(email: str, change_password_email: dict):
