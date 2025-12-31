@@ -48,6 +48,7 @@ def upload_file_to_s3(content, filename, folder, subfolder=None):
   else:
     key = get_s3_key(filename)
   S3.upload_fileobj(content, folder, key)
+  return key
 
 
 @storage_decorator

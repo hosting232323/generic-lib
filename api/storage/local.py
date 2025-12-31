@@ -13,7 +13,7 @@ def upload_file_local(content, filename, folder, subfolder=None):
 
   with open(full_path, 'wb') as file:
     file.write(content)
-
+  return key
 
 def delete_file_local(filename, folder):
   os.remove(os.path.join(folder, filename))
