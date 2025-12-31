@@ -42,14 +42,12 @@ def delete_file_from_s3(bucket_name, key):
 
 
 @storage_decorator
-def upload_file_to_s3(content, filename, folder, allowed_extension=None):
-  key = get_s3_key(f'{folder}/{filename}')
-  if allowed_extension:
-    check = extension_allowed(key, allowed_extension)
-    if check['status'] == 'ko':
-      raise ValueError(check['error'])
-
-  S3.upload_fileobj(content, S3_BUCKET, key)
+def upload_file_to_s3(content, filename, folder, subfolder=None):
+  if subfolder:
+    key = f'{subfolder}/{filename}'
+  else:
+    key = get_s3_key(filename)
+  S3.upload_fileobj(content, folder, key)
 
 
 @storage_decorator
@@ -69,17 +67,6 @@ def list_files_in_s3(folder):
     else:
       break
   return files
-
-
-def extension_allowed(key: str, allowed_extension: list[str]):
-  if '.' in key:
-    extension = key.split('.')[-1]
-    if extension not in allowed_extension:
-      return {'status': 'ko', 'error': 'Invalid file extension'}
-  else:
-    return {'status': 'ko', 'error': 'File name does not contain an extension'}
-
-  return {'status': 'ok'}
 
 
 def get_s3_key(key):
