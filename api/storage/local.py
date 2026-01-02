@@ -1,5 +1,6 @@
 import os
-from ..settings import IS_DEV
+from flask import request
+from ..settings import IS_DEV, API_PREFIX
 
 
 def upload_file_local(content, filename, folder, subfolder=None):
@@ -13,7 +14,8 @@ def upload_file_local(content, filename, folder, subfolder=None):
 
   with open(full_path, 'wb') as file:
     file.write(content)
-  return key
+  return f'http{"s" if not IS_DEV else ""}://{request.host}{f"/{API_PREFIX}" if API_PREFIX else ""}/photos/{key}',
+
 
 def delete_file_local(filename, folder):
   os.remove(os.path.join(folder, filename))
