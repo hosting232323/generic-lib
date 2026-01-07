@@ -43,7 +43,7 @@ def db_backup(db_url: str, folder: str, storage_type, subfolder: str = None):
     file_url = upload_file(content.read() if storage_type == 'local' else content, filename, folder, storage_type, subfolder)
   delete_file(filename, '', 'local')
 
-  backups = get_all_filenames(folder, storage_type)
+  backups = get_all_filenames(folder, storage_type, subfolder)
   backups.sort()
   if len(backups) > POSTGRES_BACKUP_DAYS:
     files_to_delete = backups[: len(backups) - POSTGRES_BACKUP_DAYS]
