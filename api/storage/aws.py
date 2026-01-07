@@ -2,11 +2,11 @@ import boto3
 import botocore
 from flask import abort
 
-from .settings import AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+from ..settings import AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, IS_DEV
 
 
 S3 = None
-
+S3_BUCKET = 'fastsite-postgres-backup'
 
 if AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY:
   S3 = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY_ID, aws_secret_access_key=AWS_SECRET_ACCESS_KEY)
@@ -24,8 +24,8 @@ def storage_decorator(func):
 
 
 @storage_decorator
-def download_file_from_s3(bucket_name, key, is_dev=None):
-  key = get_s3_key(key, is_dev)
+def download_file_from_s3(bucket_name, key):
+  key = get_s3_key(key)
   try:
     return S3.get_object(Bucket=bucket_name, Key=str(key))['Body'].read()
   except botocore.exceptions.ClientError as e:
@@ -36,28 +36,27 @@ def download_file_from_s3(bucket_name, key, is_dev=None):
 
 
 @storage_decorator
-def delete_file_from_s3(bucket_name, key, is_dev=None):
-  key = get_s3_key(key, is_dev)
+def delete_file_from_s3(bucket_name, key):
+  key = get_s3_key(key)
   S3.delete_object(Bucket=bucket_name, Key=key)
 
 
 @storage_decorator
-def upload_file_to_s3(file, bucket_name, key, allowed_extension=None, is_dev=None):
-  key = get_s3_key(key, is_dev)
-  if allowed_extension:
-    check = extension_allowed(key, allowed_extension)
-    if check['status'] == 'ko':
-      raise ValueError(check['error'])
-
-  S3.upload_fileobj(file, bucket_name, key)
+def upload_file_to_s3(content, filename, folder, subfolder=None):
+  if subfolder:
+    key = f'{subfolder}/{filename}'
+  else:
+    key = get_s3_key(filename)
+  S3.upload_fileobj(content, folder, key)
+  return f'https://{folder}.s3.eu-north-1.amazonaws.com/{key}'
 
 
 @storage_decorator
-def list_files_in_s3(bucket, folder=''):
+def list_files_in_s3(folder):
   files = []
   continuation_token = None
   while True:
-    list_params = {'Bucket': bucket, 'Prefix': folder}
+    list_params = {'Bucket': S3_BUCKET, 'Prefix': folder}
     if continuation_token:
       list_params['ContinuationToken'] = continuation_token
 
@@ -71,21 +70,10 @@ def list_files_in_s3(bucket, folder=''):
   return files
 
 
-def extension_allowed(key: str, allowed_extension: list[str]):
-  if '.' in key:
-    extension = key.split('.')[-1]
-    if extension not in allowed_extension:
-      return {'status': 'ko', 'error': 'Invalid file extension'}
-  else:
-    return {'status': 'ko', 'error': 'File name does not contain an extension'}
-
-  return {'status': 'ok'}
-
-
-def get_s3_key(key, is_dev):
-  if is_dev is None:
+def get_s3_key(key):
+  if IS_DEV is None:
     return key
-  elif is_dev:
+  elif IS_DEV:
     return f'test/{key}'
   else:
     return f'prod/{key}'
