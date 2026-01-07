@@ -37,7 +37,7 @@ def escape_md(text: str) -> str:
   return text
 
 
-async def send_error(text):
+async def send_message(text):
   await Bot(TELEGRAM_TOKEN).send_message(
     chat_id=CHAT_ID,
     text=text,
@@ -51,8 +51,14 @@ def send_telegram_error(trace: str):
     return
 
   message = f'*Errore:*\n```\n{trace}\n```\n\n*Request Data:*\n```\n{escape_md(extract_request_data())}\n```'
-  asyncio.run_coroutine_threadsafe(send_error(message), loop)
+  asyncio.run_coroutine_threadsafe(send_message(message), loop)
 
+
+def send_telegram_message(text: str):
+  if IS_DEV or not TELEGRAM_TOKEN:
+    return
+
+  asyncio.run_coroutine_threadsafe(send_message(text), loop)
 
 def extract_request_data():
   request_info = {'path': request.path, 'method': request.method, 'headers': dict(request.headers)}
