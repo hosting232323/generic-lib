@@ -9,15 +9,15 @@ def upload_file(content, filename, folder, storage_type, subfolder=None):
     return upload_file_local(content, filename, folder, subfolder)
 
 
-def delete_file(filename, folder, storage_type):
+def delete_file(filename, folder, storage_type, subfolder=None):
   if storage_type == 's3':
-    delete_file_from_s3(filename, folder)
+    delete_file_from_s3(filename, folder, subfolder)
   elif storage_type == 'local':
-    delete_file_local(filename, folder)
+    delete_file_local(filename, folder, subfolder)
 
 
-def get_all_filenames(folder, storage_type):
+def get_all_filenames(folder, storage_type, subfolder=None):
   if storage_type == 's3':
-    return list_files_in_s3(folder)
+    return list_files_in_s3(folder, subfolder)
   elif storage_type == 'local':
-    return list_files_local(folder)
+    return list_files_local(folder, subfolder)

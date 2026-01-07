@@ -17,12 +17,23 @@ def upload_file_local(content, filename, folder, subfolder=None):
   return f'http{"s" if not IS_DEV else ""}://{request.host}{f"/{API_PREFIX}" if API_PREFIX else ""}/photos/{key}',
 
 
-def delete_file_local(filename, folder):
-  os.remove(os.path.join(folder, filename))
+def delete_file_local(filename, folder, subfolder=None):
+  if subfolder:
+    key = subfolder
+  elif folder:
+    key = f'{folder}/{get_local_key('')}'
+  else:
+    key = folder
+  os.remove(os.path.join(key, filename))
 
 
-def list_files_local(folder):
-  return [os.path.join(folder, file) for file in os.listdir(folder) if os.path.isfile(os.path.join(folder, file))]
+def list_files_local(folder, subfolder=None):
+  if subfolder:
+    key = subfolder
+  else:
+    key = f'{folder}/{get_local_key('')}'
+  
+  return [os.path.join(key, file) for file in os.listdir(key) if os.path.isfile(os.path.join(key, file))]
 
 
 def get_local_key(key):
