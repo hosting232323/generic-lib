@@ -2,9 +2,11 @@ import os
 import sys
 import subprocess
 from datetime import datetime
-from werkzeug.utils import secure_filename
 
-from api.storage import upload_file_to_s3, delete_file_from_s3, list_files_in_s3
+from api.storage import upload_file, get_all_filenames, delete_file
+
+
+POSTGRES_BACKUP_DAYS = int(os.environ.get('POSTGRES_BACKUP_DAYS', 14))
 
 
 def data_export(db_url: str):
@@ -35,25 +37,19 @@ def data_import(db_url: str, filename: str):
   )
 
 
-def db_backup(db_url: str, sub_folder: str):
-  zip_filename = data_export(db_url)
-  s3_bucket = 'fastsite-postgres-backup'
-  s3_key = f'{sub_folder}/{secure_filename(zip_filename)}'
+def db_backup(db_url: str, folder: str, storage_type, subfolder: str = None):
+  filename = data_export(db_url)
+  with open(filename, 'rb') as content:
+    file_url = upload_file(
+      content.read() if storage_type == 'local' else content, filename, folder, storage_type, subfolder
+    )
+  delete_file(filename, '', 'local')
 
-  with open(zip_filename, 'rb') as file:
-    upload_file_to_s3(file, s3_bucket, s3_key)
-  os.remove(zip_filename)
-  manage_s3_backups(s3_bucket, sub_folder)
-
-  print(f'[{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}] Backup eseguito!')
-
-
-def manage_s3_backups(bucket: str, sub_folder: str):
-  backups = list_files_in_s3(bucket, sub_folder)
+  backups = get_all_filenames(folder, storage_type, subfolder)
   backups.sort()
-  backup_days = int(os.environ.get('POSTGRES_BACKUP_DAYS', 14))
+  if len(backups) > POSTGRES_BACKUP_DAYS:
+    files_to_delete = backups[: len(backups) - POSTGRES_BACKUP_DAYS]
+    for file_to_delete in files_to_delete:
+      delete_file(file_to_delete, folder, storage_type)
 
-  if len(backups) > backup_days:
-    files_to_delete = backups[: len(backups) - backup_days]
-    for file_key in files_to_delete:
-      delete_file_from_s3(bucket, file_key)
+  return {'status': 'ok', 'message': 'Backup eseguito correttamente', 'file_url': file_url}
