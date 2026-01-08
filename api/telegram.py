@@ -55,9 +55,12 @@ def send_telegram_error(trace: str):
 
 
 def send_telegram_message(text: str):
-  if IS_DEV or not TELEGRAM_TOKEN:
-    return
-
+  # if IS_DEV or not TELEGRAM_TOKEN:
+  #   return
+  formatted_text = json.dumps(text, indent=2, ensure_ascii=False)
+  asyncio.run_coroutine_threadsafe(
+      send_message(f"📊 Report Check Mismatch\n\n```json\n{formatted_text}\n```"), loop
+  )
   asyncio.run_coroutine_threadsafe(send_message(text), loop)
 
 def extract_request_data():
