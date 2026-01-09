@@ -37,12 +37,12 @@ def escape_md(text: str) -> str:
   return text
 
 
-async def send_message(text):
+async def send_message(text, parse_mode='MarkdownV2'):
   await Bot(TELEGRAM_TOKEN).send_message(
     chat_id=CHAT_ID,
     text=text,
     message_thread_id=TELEGRAM_TOPIC[PROJECT_NAME],
-    parse_mode='MarkdownV2',
+    parse_mode=parse_mode,
   )
 
 
@@ -55,13 +55,7 @@ def send_telegram_error(trace: str):
 
 
 def send_telegram_message(text: str):
-  # if IS_DEV or not TELEGRAM_TOKEN:
-  #   return
-  formatted_text = json.dumps(text, indent=2, ensure_ascii=False)
-  asyncio.run_coroutine_threadsafe(
-      send_message(f"📊 Report Check Mismatch\n\n```json\n{formatted_text}\n```"), loop
-  )
-  asyncio.run_coroutine_threadsafe(send_message(text), loop)
+  asyncio.run_coroutine_threadsafe(send_message(text, 'Markdown'), loop)
 
 def extract_request_data():
   request_info = {'path': request.path, 'method': request.method, 'headers': dict(request.headers)}
