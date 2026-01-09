@@ -25,15 +25,11 @@ def send_email(receiver_email: str, body, subject: str, attachments: list = None
     message.attach(part1)
   else:
     raise ValueError('Il corpo dell\'email deve essere un dizionario con le chiavi "text" e "html" o una stringa')
-  
+
   if attachments:
     for attachment in attachments:
       part = MIMEApplication(attachment['content'])
-      part.add_header(
-        'Content-Disposition',
-        'attachment',
-        filename=attachment['filename']
-      )
+      part.add_header('Content-Disposition', 'attachment', filename=attachment['filename'])
       message.attach(part)
 
   try:
