@@ -8,7 +8,7 @@ from .sender import EMAIL_SENDER
 
 
 def send_email(receiver_email: str, body, subject: str, attachments: list = None):
-  message = MIMEMultipart()
+  message = MIMEMultipart('alternative')
   message['From'] = formataddr((EMAIL_SENDER['name'], EMAIL_SENDER['address']))
   message['To'] = receiver_email
   message['Subject'] = subject
