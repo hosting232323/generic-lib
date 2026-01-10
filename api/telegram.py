@@ -57,6 +57,7 @@ def send_telegram_error(trace: str):
 def send_telegram_message(text: str):
   asyncio.run_coroutine_threadsafe(send_message(text, 'Markdown'), loop)
 
+
 def extract_request_data():
   request_info = {'path': request.path, 'method': request.method, 'headers': dict(request.headers)}
   args = request.args.to_dict()
