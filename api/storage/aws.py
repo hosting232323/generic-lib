@@ -6,7 +6,6 @@ from ..settings import AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, IS_DEV
 
 
 S3 = None
-S3_BUCKET = 'fastsite-postgres-backup'
 
 if AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY:
   S3 = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY_ID, aws_secret_access_key=AWS_SECRET_ACCESS_KEY)
@@ -25,7 +24,7 @@ def storage_decorator(func):
 
 @storage_decorator
 def download_file_from_s3(bucket_name, key):
-  key = get_s3_key(key)
+  key = get_s3_key(key, None)  # Da sistemare
   try:
     return S3.get_object(Bucket=bucket_name, Key=str(key))['Body'].read()
   except botocore.exceptions.ClientError as e:
@@ -36,27 +35,23 @@ def download_file_from_s3(bucket_name, key):
 
 
 @storage_decorator
-def delete_file_from_s3(bucket_name, key):
-  key = get_s3_key(key)
-  S3.delete_object(Bucket=bucket_name, Key=key)
+def delete_file_from_s3(filename, folder, subfolder=None):
+  S3.delete_object(Bucket=folder, Key=get_s3_key(filename, subfolder))
 
 
 @storage_decorator
 def upload_file_to_s3(content, filename, folder, subfolder=None):
-  if subfolder:
-    key = f'{subfolder}/{filename}'
-  else:
-    key = get_s3_key(filename)
+  key = get_s3_key(filename, subfolder)
   S3.upload_fileobj(content, folder, key)
   return f'https://{folder}.s3.eu-north-1.amazonaws.com/{key}'
 
 
 @storage_decorator
-def list_files_in_s3(folder):
+def list_files_in_s3(folder, subfolder=None):
   files = []
   continuation_token = None
   while True:
-    list_params = {'Bucket': S3_BUCKET, 'Prefix': folder}
+    list_params = {'Bucket': folder, 'Prefix': get_s3_key('', subfolder)}
     if continuation_token:
       list_params['ContinuationToken'] = continuation_token
 
@@ -70,9 +65,9 @@ def list_files_in_s3(folder):
   return files
 
 
-def get_s3_key(key):
-  if IS_DEV is None:
-    return key
+def get_s3_key(key, subfolder):
+  if subfolder:
+    return f'{subfolder}/{key}'
   elif IS_DEV:
     return f'test/{key}'
   else:
