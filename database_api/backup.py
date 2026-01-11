@@ -50,7 +50,7 @@ def db_backup(db_url: str, folder: str, storage_type, subfolder: str = None):
   if len(backups) > POSTGRES_BACKUP_DAYS:
     files_to_delete = backups[: len(backups) - POSTGRES_BACKUP_DAYS]
     for file_to_delete in files_to_delete:
-      subfolder, filename = file_to_delete.split("/", 1)
+      subfolder, filename = file_to_delete.split('/', 1)
       delete_file(filename, folder, storage_type, subfolder)
 
   return {'status': 'ok', 'message': 'Backup eseguito correttamente', 'file_url': file_url}
