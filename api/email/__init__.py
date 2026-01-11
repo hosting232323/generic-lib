@@ -2,11 +2,12 @@ import smtplib
 from email.utils import formataddr
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
 
 from .sender import EMAIL_SENDER
 
 
-def send_email(receiver_email: str, body, subject: str):
+def send_email(receiver_email: str, body, subject: str, attachments: list = None):
   message = MIMEMultipart('alternative')
   message['From'] = formataddr((EMAIL_SENDER['name'], EMAIL_SENDER['address']))
   message['To'] = receiver_email
@@ -24,6 +25,12 @@ def send_email(receiver_email: str, body, subject: str):
     message.attach(part1)
   else:
     raise ValueError('Il corpo dell\'email deve essere un dizionario con le chiavi "text" e "html" o una stringa')
+
+  if attachments:
+    for attachment in attachments:
+      part = MIMEApplication(attachment['content'])
+      part.add_header('Content-Disposition', 'attachment', filename=attachment['filename'])
+      message.attach(part)
 
   try:
     with smtplib.SMTP_SSL(EMAIL_SENDER['smtp_server'], EMAIL_SENDER['smtp_port']) as server:
