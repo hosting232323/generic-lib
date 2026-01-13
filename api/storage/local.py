@@ -38,8 +38,8 @@ def list_files_local(folder, subfolder=None):
 
 
 def zip_folder_local(folder_path, dest_folder=None):
-  zip_filename = os.path.basename(folder_path.rstrip("/\\")) + '.zip'
-  
+  zip_filename = os.path.basename(folder_path.rstrip('/\\')) + '.zip'
+
   if dest_folder:
     zip_path = os.path.join(dest_folder, zip_filename)
   else:
