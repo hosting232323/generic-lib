@@ -1,6 +1,9 @@
 import os
+import zipfile
+import paramiko
 import subprocess
 from flask import request
+from datetime import datetime, timedelta
 
 from ..settings import IS_DEV, API_PREFIX
 
@@ -44,6 +47,65 @@ def folder_backup(repo_path, folder, password):
   env['RESTIC_PASSWORD'] = password
 
   subprocess.run(['restic', '-r', repo_path, 'backup', folder], env=env, check=True)
+
+
+def zip_folder_local(base_folder, dest_folder):
+  today = datetime.now().date()
+  yesterday_str = (today - timedelta(days=1)).strftime('%Y-%m-%d')
+  today_path = os.path.join(base_folder, today.strftime('%Y-%m-%d'))
+  yesterday_path = os.path.join(base_folder, yesterday_str)
+  rolling_zip_path = os.path.join(dest_folder, 'current.zip')
+
+  if os.path.exists(today_path):
+    with zipfile.ZipFile(rolling_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+      for root, _, files in os.walk(today_path):
+        for file in files:
+          file_path = os.path.join(root, file)
+          arcname = os.path.relpath(file_path, start=today_path)
+          zipf.write(file_path, arcname)
+
+  final_zip_path = os.path.join(dest_folder, f'{yesterday_str}.zip')
+  if not os.path.exists(final_zip_path) and os.path.exists(yesterday_path):
+    with zipfile.ZipFile(final_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+      for root, _, files in os.walk(yesterday_path):
+        for file in files:
+          file_path = os.path.join(root, file)
+          arcname = os.path.relpath(file_path, start=yesterday_path)
+          zipf.write(file_path, arcname)
+
+  return {
+    'current': rolling_zip_path if os.path.exists(today_path) else None,
+    'final': final_zip_path if os.path.exists(final_zip_path) else None,
+  }
+
+
+def upload_large_file_to_pc(file_path, remote_host, remote_user, remote_path, password, port=22):
+  ssh = paramiko.SSHClient()
+  ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+  ssh.connect(remote_host, username=remote_user, port=port, password=password)
+
+  sftp = ssh.open_sftp()
+  try:
+    remote_size = sftp.stat(remote_path).st_size
+  except FileNotFoundError:
+    remote_size = 0
+
+  local_size = os.path.getsize(file_path)
+  if remote_size > local_size:
+    raise ValueError('Remote file is larger than local file!')
+
+  with open(file_path, 'rb') as f:
+    f.seek(remote_size)
+    with sftp.file(remote_path, 'ab') as remote_file:
+      while True:
+        data = f.read(1024 * 1024 * 50)
+        if not data:
+          break
+        remote_file.write(data)
+
+  sftp.close()
+  ssh.close()
+  return f'{remote_user}@{remote_host}:{remote_path}'
 
 
 def get_local_key(key):
