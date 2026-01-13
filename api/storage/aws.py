@@ -1,6 +1,7 @@
 import boto3
 import botocore
 from flask import abort
+from boto3.s3.transfer import TransferConfig
 
 from ..settings import AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, IS_DEV
 
@@ -43,6 +44,20 @@ def delete_file_from_s3(filename, folder, subfolder=None):
 def upload_file_to_s3(content, filename, folder, subfolder=None):
   key = get_s3_key(filename, subfolder)
   S3.upload_fileobj(content, folder, key)
+  return f'https://{folder}.s3.eu-north-1.amazonaws.com/{key}'
+
+
+config = TransferConfig(
+  multipart_threshold=1024 * 1024 * 50, multipart_chunksize=1024 * 1024 * 50, max_concurrency=5, use_threads=True
+)
+
+
+@storage_decorator
+def upload_large_file_to_s3(file_path, filename, folder, subfolder=None):
+  key = get_s3_key(filename, subfolder)
+
+  S3.upload_file(Filename=file_path, Bucket=folder, Key=key, Config=config, ExtraArgs={'ChecksumAlgorithm': 'SHA256'})
+
   return f'https://{folder}.s3.eu-north-1.amazonaws.com/{key}'
 
 
