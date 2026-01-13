@@ -4,6 +4,7 @@ from .server import folder_backup_server
 from ..telegram import send_telegram_message
 from .aws import list_files_in_s3, upload_file_to_s3, delete_file_from_s3
 from .local import upload_file_local, delete_file_local, list_files_local, folder_backup_local
+from .server import folder_backup_server, list_files_server, delete_file_server, upload_file_server
 
 
 def upload_file(content, filename, folder, storage_type, subfolder=None):
@@ -11,6 +12,8 @@ def upload_file(content, filename, folder, storage_type, subfolder=None):
     return upload_file_to_s3(content, filename, folder, subfolder)
   elif storage_type == 'local':
     return upload_file_local(content, filename, folder, subfolder)
+  elif storage_type == 'server':
+    return upload_file_server(content, filename, folder, subfolder)
 
 
 def delete_file(filename, folder, storage_type, subfolder=None):
@@ -18,6 +21,8 @@ def delete_file(filename, folder, storage_type, subfolder=None):
     delete_file_from_s3(filename, folder, subfolder)
   elif storage_type == 'local':
     delete_file_local(filename, folder, subfolder)
+  elif storage_type == 'server':
+    return delete_file_server(folder, subfolder)
 
 
 def get_all_filenames(folder, storage_type, subfolder=None):
@@ -25,6 +30,15 @@ def get_all_filenames(folder, storage_type, subfolder=None):
     return list_files_in_s3(folder, subfolder)
   elif storage_type == 'local':
     return list_files_local(folder, subfolder)
+  elif storage_type == 'server':
+    return list_files_server(folder, subfolder)
+
+
+def folder_backup(folder_to_backup, storage_type):
+  if storage_type == 'local':
+    return folder_backup_local(folder_to_backup)
+  elif storage_type == 'server':
+    return folder_backup_server(folder_to_backup)
 
 
 def folder_backup(folder_to_backup, storage_type):
