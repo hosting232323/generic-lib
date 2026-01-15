@@ -6,7 +6,7 @@ def upload_file(content, filename, folder, storage_type, subfolder=None):
   if storage_type == 's3':
     return upload_file_to_s3(content, filename, folder, subfolder)
   elif storage_type == 'local':
-    return upload_file_local(content, filename, folder, subfolder)
+    return upload_file_local(content.read(), filename, folder, subfolder)
 
 
 def delete_file(filename, folder, storage_type, subfolder=None):

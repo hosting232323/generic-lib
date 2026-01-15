@@ -41,7 +41,7 @@ def db_backup(db_url: str, folder: str, storage_type, subfolder: str = None):
   filename = data_export(db_url)
   with open(filename, 'rb') as content:
     file_url = upload_file(
-      content.read() if storage_type == 'local' else content, filename, folder, storage_type, subfolder
+      content, filename, folder, storage_type, subfolder
     )
   delete_file(filename, '', 'local')
 
