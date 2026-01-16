@@ -13,7 +13,7 @@ def upload_file_local(content, filename, folder, subfolder=None):
   os.makedirs(os.path.dirname(full_path), exist_ok=True)
 
   with open(full_path, 'wb') as file:
-    file.write(content)
+    file.write(content.read())
   return f'http{"s" if not IS_DEV else ""}://{request.host}{f"/{API_PREFIX}" if API_PREFIX else ""}/photos/{key}'
 
 
