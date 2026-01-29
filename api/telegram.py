@@ -46,11 +46,13 @@ async def send_message(text, parse_mode='MarkdownV2'):
   )
 
 
-def send_telegram_error(trace: str):
+def send_telegram_error(trace: str, endpoint: bool = True):
   if IS_DEV or not TELEGRAM_TOKEN:
     return
 
-  message = f'*Errore:*\n```\n{trace}\n```\n\n*Request Data:*\n```\n{escape_md(extract_request_data())}\n```'
+  message = f'*Errore:*\n```\n{trace}\n```'
+  if endpoint:
+    message += f'\n\n*Request Data:*\n```\n{escape_md(extract_request_data())}\n```'
   asyncio.run_coroutine_threadsafe(send_message(message), loop)
 
 
