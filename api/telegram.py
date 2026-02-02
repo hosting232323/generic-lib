@@ -60,7 +60,7 @@ def send_telegram_message(text: str):
   asyncio.run_coroutine_threadsafe(send_message(text, 'Markdown'), loop)
 
 
-def extract_request_data():
+def extract_request_data(string_result: bool = True):
   request_info = {'path': request.path, 'method': request.method, 'headers': dict(request.headers)}
   args = request.args.to_dict()
   if args:
@@ -71,4 +71,4 @@ def extract_request_data():
   json_data = request.get_json(silent=True)
   if json_data is not None:
     request_info['json'] = json_data
-  return json.dumps(request_info, indent=2, ensure_ascii=False)
+  return json.dumps(request_info, indent=2, ensure_ascii=False) if string_result else request_info
