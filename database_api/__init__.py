@@ -12,9 +12,14 @@ engine = None
 Base = declarative_base()
 
 
-def set_database(url: str):
+def set_database(url: str, pool_size: int = 5, max_overflow: int = 10):
   global engine
-  engine = create_engine(url, pool_pre_ping=True)
+  engine = create_engine(
+    url,
+    pool_size=pool_size,
+    max_overflow=max_overflow,
+    pool_pre_ping=True
+  )
 
   alembic_migration_check(engine, Session)
 
