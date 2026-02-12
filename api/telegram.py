@@ -37,11 +37,11 @@ def escape_md(text: str) -> str:
   return text
 
 
-async def send_message(text, parse_mode='MarkdownV2'):
+async def send_message(text, parse_mode='MarkdownV2', topic=None):
   await Bot(TELEGRAM_TOKEN).send_message(
     chat_id=CHAT_ID,
     text=text,
-    message_thread_id=TELEGRAM_TOPIC[PROJECT_NAME],
+    message_thread_id=topic if topic else TELEGRAM_TOPIC[PROJECT_NAME],
     parse_mode=parse_mode,
   )
 
@@ -56,8 +56,8 @@ def send_telegram_error(trace: str, endpoint: bool = True):
   asyncio.run_coroutine_threadsafe(send_message(message), loop)
 
 
-def send_telegram_message(text: str):
-  asyncio.run_coroutine_threadsafe(send_message(text, 'Markdown'), loop)
+def send_telegram_message(text: str, topic=None):
+  asyncio.run_coroutine_threadsafe(send_message(text, 'Markdown', topic), loop)
 
 
 def extract_request_data(string_result: bool = True):
