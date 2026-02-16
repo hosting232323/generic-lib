@@ -79,7 +79,7 @@ def change_password(pass_token: str, new_password: str):
   return {'status': 'ok', 'message': 'Password aggiornata con successo'}
 
 
-def google_login(google_token: str, register_email: dict = None):
+def google_login(google_token: str, register_email: dict = None, params: dict = None):
   email = id_token.verify_oauth2_token(google_token, requests.Request(), GOOGLE_CLIENT_ID)['email']
   user = get_user_by_email(email)
 
@@ -87,7 +87,7 @@ def google_login(google_token: str, register_email: dict = None):
     if not register_email:
       return {'status': 'ko', 'error': 'User not found and registration is not enabled'}
 
-    register_result = register_user(email=email, register_email=register_email, password=None)
+    register_result = register_user(email=email, register_email=register_email, password=None, params=params)
     if register_result['status'] == 'ko':
       return register_result
     user = get_user_by_email(email)
