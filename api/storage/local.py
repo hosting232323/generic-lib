@@ -33,7 +33,8 @@ def list_files_local(folder, subfolder=None):
   else:
     key = f'{folder}/{get_local_key("")}'
 
-  return [os.path.join(key, file) for file in os.listdir(key) if os.path.isfile(os.path.join(key, file))]
+  full_path = os.path.join(folder, key)
+  return [os.path.join(full_path, file) for file in os.listdir(full_path) if os.path.isfile(os.path.join(full_path, file))]
 
 
 def get_local_key(key):
