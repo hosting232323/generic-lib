@@ -35,7 +35,9 @@ def list_files_local(folder, subfolder=None):
 
   full_path = os.path.join(folder, key)
   return [
-    os.path.join(full_path, file) for file in os.listdir(full_path) if os.path.isfile(os.path.join(full_path, file))
+    os.path.join(key, file)
+    for file in os.listdir(full_path)
+    if os.path.isfile(os.path.join(full_path, file))
   ]
 
 
