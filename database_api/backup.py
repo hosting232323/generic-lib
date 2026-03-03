@@ -44,11 +44,14 @@ def db_backup(db_url: str, folder: str, storage_type, subfolder: str = None):
   delete_file(filename, '', 'local')
 
   backups = get_all_filenames(folder, storage_type, subfolder)
-  backups.sort()
-  if len(backups) > POSTGRES_BACKUP_DAYS:
-    files_to_delete = backups[: len(backups) - POSTGRES_BACKUP_DAYS]
+  dump_files = [f for f in backups if f.lower().endswith('.dump')]
+  dump_files.sort()
+  if len(dump_files) > POSTGRES_BACKUP_DAYS:
+    files_to_delete = dump_files[: len(dump_files) - POSTGRES_BACKUP_DAYS]
     for file_to_delete in files_to_delete:
-      subfolder, filename = file_to_delete.split('/', 1)
-      delete_file(filename, folder, storage_type, subfolder)
+      filename = os.path.basename(file_to_delete)
+      subfolder_path = os.path.dirname(file_to_delete) or None
+
+      delete_file(filename, folder, storage_type, subfolder_path)
 
   return {'status': 'ok', 'message': 'Backup eseguito correttamente', 'file_url': file_url}
