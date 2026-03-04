@@ -19,9 +19,9 @@ def upload_file_local(content, filename, folder, subfolder=None):
 
 def delete_file_local(filename, folder, subfolder=None):
   if subfolder:
-    key = subfolder
+    key = os.path.join(folder, subfolder)
   elif folder:
-    key = f'{folder}/{get_local_key("")}'
+    key = os.path.join(folder, get_local_key(''))
   else:
     key = folder
   os.remove(os.path.join(key, filename))
