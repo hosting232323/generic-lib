@@ -42,7 +42,7 @@ async def send_message(text, parse_mode='MarkdownV2', topic_name=None):
   await Bot(TELEGRAM_TOKEN).send_message(
     chat_id=CHAT_ID,
     text=text,
-    message_thread_id=TELEGRAM_TOKEN[topic_name] if topic_name else TELEGRAM_TOPIC[PROJECT_NAME],
+    message_thread_id=TELEGRAM_TOPIC[topic_name] if topic_name else TELEGRAM_TOPIC[PROJECT_NAME],
     parse_mode=parse_mode,
   )
 
