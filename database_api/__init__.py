@@ -64,9 +64,3 @@ class BaseEntity(Base):
   def __repr__(self):
     attributes = [f'{attr}: {getattr(self, attr)}' for attr in self.to_dict()]
     return f'{self.__class__.__name__} {{{", ".join(attributes)}}}'
-
-
-class BaseEnum(enum.Enum):
-  @classmethod
-  def get_enum_option(cls, value):
-    return next((p for p in cls if p.value == value), None)
