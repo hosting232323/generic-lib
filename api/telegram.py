@@ -15,7 +15,6 @@ TELEGRAM_TOPIC = {
   'italco-be': 4294967355,
   'chatty-be': 4294967354,
   'generic-be': 4294967350,
-  'strongbox-be': 4294967353,
   'generic-be-demo': 4294967664,
   'generic-booking': 4294967351,
 }
