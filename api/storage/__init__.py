@@ -1,3 +1,4 @@
+from ..telegram import send_telegram_message
 from .local import upload_file_local, delete_file_local, list_files_local
 from .aws import list_files_in_s3, upload_file_to_s3, delete_file_from_s3
 
@@ -21,3 +22,33 @@ def get_all_filenames(folder, storage_type, subfolder=None):
     return list_files_in_s3(folder, subfolder)
   elif storage_type == 'local':
     return list_files_local(folder, subfolder)
+
+
+def check_mismatch(db_files, folder, storage_type, subfolder=None):
+  if storage_type == 's3':
+    files = list_files_in_s3(folder, subfolder)
+  elif storage_type == 'local':
+    files = list_files_local(folder, subfolder)
+
+  send_telegram_message(
+    '\n'.join(
+      ['*📊 Report Check Mismatch*\n']
+      + format_mismatch_message(db_files, files, '\n*❌ File presenti solo nel DB ({}):*', '✔️ Nessun file solo nel DB')
+      + format_mismatch_message(
+        files,
+        db_files,
+        '\n*❌ File presenti solo in storage ' + storage_type + ' ({}):*',
+        '✔️ Nessun file solo in storage',
+      )
+    )
+  )
+
+
+def format_mismatch_message(first_list: list, second_list: list, success_text: str, failure_text: str):
+  mismatch_lines = list(map(lambda mismatch: f'- {mismatch}', sorted(set(first_list) - set(second_list))))
+
+  return (
+    [failure_text]
+    if len(mismatch_lines) == 0
+    else ([success_text.format(len(mismatch_lines)), '```'] + mismatch_lines + ['```'])
+  )
