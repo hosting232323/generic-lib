@@ -1,5 +1,5 @@
-from .local import upload_file_local, delete_file_local, list_files_local
-from .aws import list_files_in_s3, upload_file_to_s3, delete_file_from_s3
+from .local import upload_file_local, delete_file_local, list_files_local, check_mismatch_local
+from .aws import list_files_in_s3, upload_file_to_s3, delete_file_from_s3, check_mismatch_in_s3
 
 
 def upload_file(content, filename, folder, storage_type, subfolder=None):
@@ -21,3 +21,10 @@ def get_all_filenames(folder, storage_type, subfolder=None):
     return list_files_in_s3(folder, subfolder)
   elif storage_type == 'local':
     return list_files_local(folder, subfolder)
+
+
+def check_mismatch(db_url, query, folder, subfolder, storage_type):
+  if storage_type == 's3':
+    return check_mismatch_in_s3(db_url, query, folder, subfolder)
+  elif storage_type == 'local':
+    return check_mismatch_local(db_url, query, folder, subfolder)

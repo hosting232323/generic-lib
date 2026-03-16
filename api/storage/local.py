@@ -1,6 +1,7 @@
 import os
 from flask import request
 from ..settings import IS_DEV, API_PREFIX
+from utils import get_db_files, parse_is_dev
 
 
 def upload_file_local(content, filename, folder, subfolder=None):
@@ -35,6 +36,28 @@ def list_files_local(folder, subfolder=None):
 
   full_path = os.path.join(folder, key)
   return [os.path.join(key, file) for file in os.listdir(full_path) if os.path.isfile(os.path.join(full_path, file))]
+
+
+def check_mismatch_local(db_url, query, folder, subfolder):
+  db_files = get_db_files(db_url, query)
+  local_files = get_local_files(folder, parse_is_dev(subfolder))
+
+  only_in_local = local_files - db_files
+  print(f'\nFile presenti solo in locale ({len(only_in_local)}):')
+  for file in sorted(only_in_local):
+    print(f'- {file}')
+
+  only_in_db = db_files - local_files
+  print(f'\nFile presenti solo nel locale ({len(only_in_db)}):')
+  for file in sorted(only_in_db):
+    print(f'- {file}')
+
+
+def get_local_files(folder, is_dev=None):
+  subfolder = ''
+  if is_dev is not None:
+    subfolder = 'test/' if is_dev else 'prod/'
+  return {os.path.basename(url) for url in list_files_local(folder, subfolder=subfolder)}
 
 
 def get_local_key(key):

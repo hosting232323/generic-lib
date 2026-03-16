@@ -1,7 +1,9 @@
+import os
 import boto3
 import botocore
 from flask import abort
 
+from utils import get_db_files, parse_is_dev
 from ..settings import AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, IS_DEV
 
 
@@ -65,6 +67,22 @@ def list_files_in_s3(folder, subfolder=None):
   return files
 
 
+@storage_decorator
+def check_mismatch_in_s3(db_url, query, folder, subfolder):
+  db_files = get_db_files(db_url, query)
+  s3_files = get_s3_files(folder, parse_is_dev(subfolder))
+
+  only_in_s3 = s3_files - db_files
+  print(f'\nFile presenti solo in S3 ({len(only_in_s3)}):')
+  for file in sorted(only_in_s3):
+    print(f'- {file}')
+
+  only_in_db = db_files - s3_files
+  print(f'\nFile presenti solo nel DB ({len(only_in_db)}):')
+  for file in sorted(only_in_db):
+    print(f'- {file}')
+
+
 def get_s3_key(key, subfolder):
   if subfolder:
     return f'{subfolder}/{key}'
@@ -72,3 +90,10 @@ def get_s3_key(key, subfolder):
     return f'test/{key}'
   else:
     return f'prod/{key}'
+
+
+def get_s3_files(bucket_name, is_dev=None):
+  folder_prefix = ''
+  if is_dev is not None:
+    folder_prefix = 'test/' if is_dev else 'prod/'
+  return {os.path.basename(url) for url in list_files_in_s3(bucket_name, folder=folder_prefix)}
