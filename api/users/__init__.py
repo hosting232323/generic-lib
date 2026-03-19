@@ -43,11 +43,7 @@ def delete_user(email: str):
 
 def login(email: str, password: str, get_user=False):
   user = get_user_by_email(email)
-  if not user:
-    response = {'status': 'ko', 'error': 'Utente non trovato'}
-    return (response, None) if get_user else response
-
-  if user.email != email or user.password != password:
+  if not user or user.email != email or user.password != password:
     response = {'status': 'ko', 'error': 'Credenziali errate'}
     return (response, None) if get_user else response
 
