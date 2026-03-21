@@ -56,9 +56,21 @@ def send_telegram_error(trace: str, endpoint: bool = True):
     message += f'\n\n*Request Data:*\n```\n{escape_md(extract_request_data())}\n```'
   asyncio.run_coroutine_threadsafe(send_message(message), loop)
 
-
+def run_async_safe(coro):
+    """Esegue una coroutine in modo sicuro e logga errori"""
+    future = asyncio.run_coroutine_threadsafe(coro, loop)
+    
+    def callback(fut):
+        exc = fut.exception()
+        if exc:
+            print("❌ Errore Telegram:", exc)
+        else:
+            print("✅ Messaggio Telegram inviato con successo")
+    
+    future.add_done_callback(callback)
+    
 def send_telegram_message(text: str, topic_name=None):
-  asyncio.run_coroutine_threadsafe(send_message(text, 'Markdown', topic_name), loop)
+  run_async_safe(send_message(escape_md(text), 'Markdown', topic_name))
 
 
 def extract_request_data(string_result: bool = True):
