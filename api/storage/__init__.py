@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from ..telegram import send_telegram_message
 from .local import upload_file_local, delete_file_local, list_files_local
 from .aws import list_files_in_s3, upload_file_to_s3, delete_file_from_s3
@@ -28,7 +30,7 @@ def check_mismatch(db_files, folder, storage_type, subfolder=None):
   if storage_type == 's3':
     files = list_files_in_s3(folder, subfolder)
   elif storage_type == 'local':
-    files = list_files_local(folder, subfolder)
+    files = [Path(path).name for path in list_files_local(folder, subfolder)]
 
   send_telegram_message(
     '\n'.join(
