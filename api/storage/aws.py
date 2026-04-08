@@ -47,7 +47,7 @@ def upload_file_to_s3(content, filename, folder, subfolder=None):
 
 
 @storage_decorator
-def list_files_in_s3(folder, subfolder=None):
+def list_files_in_s3(folder, subfolder=None) -> list[str]:
   files = []
   continuation_token = None
   while True:

@@ -28,7 +28,7 @@ def get_all_filenames(folder, storage_type, subfolder=None):
 
 def check_mismatch(db_files, folder, storage_type, subfolder=None):
   if storage_type == 's3':
-    files = list_files_in_s3(folder, subfolder)
+    files = [path for path in list_files_in_s3(folder, subfolder) if not path.endswith('/')]
   elif storage_type == 'local':
     files = [Path(path).name for path in list_files_local(folder, subfolder)]
 
