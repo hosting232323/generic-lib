@@ -19,7 +19,7 @@ def data_export(db_url: str):
 
 def data_import(db_url: str, filename: str):
   if not os.path.exists(filename):
-    print(f'File non trovato: {filename}')
+    print(f'File non trovato: {filename}')  # noqa: T201
     sys.exit(1)
 
   subprocess.run(

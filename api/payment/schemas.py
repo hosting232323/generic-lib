@@ -38,7 +38,8 @@ class PaymentRequest:
     # example line_items for subscription
     # line_items = [{"price": "{price_id}", "quantity": 1}]
     # example line_items for payment
-    # line_items = [{"price_data": {"currency": "eur", "product_data": {"name": "My Product"}, "unit_amount": 1000}, "quantity": 1}]
+    # line_items = [{"price_data": {"currency": "eur", "product_data": {"name": "My Product"},
+    #   "unit_amount": 1000}, "quantity": 1}]
 
     if self.shipping_address_collection is not None and not isinstance(self.shipping_address_collection, dict):
       raise ValueError('shipping_address_collection must be a dictionary or None')

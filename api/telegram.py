@@ -63,9 +63,9 @@ def run_async_safe(coro):
   def callback(fut):
     exc = fut.exception()
     if exc:
-      print('❌ Errore Telegram:', exc)
+      print('❌ Errore Telegram:', exc)  # noqa: T201
     else:
-      print('✅ Messaggio Telegram inviato con successo')
+      print('✅ Messaggio Telegram inviato con successo')  # noqa: T201
 
   future.add_done_callback(callback)
 

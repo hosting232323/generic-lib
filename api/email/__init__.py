@@ -40,5 +40,7 @@ def send_email(receiver_email: str, body, subject: str, attachments: list = None
       server.sendmail(EMAIL_SENDER['address'], receiver_email, message.as_string())
   except Exception:
     send_telegram_message(
-      f'❌ Errore invio mail a {receiver_email}:\n{body["text"] if isinstance(body, dict) and "text" in body else body}```\n{traceback.format_exc()}\n```'
+      f'❌ Errore invio mail a {receiver_email}:\n'
+      f'{body["text"] if isinstance(body, dict) and "text" in body else body}```\n'
+      f'{traceback.format_exc()}\n```'
     )
