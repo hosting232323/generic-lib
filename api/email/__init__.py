@@ -37,5 +37,5 @@ def send_email(receiver_email: str, body, subject: str, attachments: list = None
     with smtplib.SMTP_SSL(EMAIL_SENDER['smtp_server'], EMAIL_SENDER['smtp_port']) as server:
       server.login(EMAIL_SENDER['address'], EMAIL_SENDER['password'])
       server.sendmail(EMAIL_SENDER['address'], receiver_email, message.as_string())
-  except Exception as e:
-    send_telegram_message(f"❌ Errore invio mail a {receiver_email}:\n```\n{traceback.format_exc()}\n```")
+  except Exception:
+    send_telegram_message(f'❌ Errore invio mail a {receiver_email}:\n```\n{traceback.format_exc()}\n```')
