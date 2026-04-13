@@ -1,4 +1,5 @@
 import os
+import subprocess
 from flask import request
 
 from ..settings import IS_DEV, API_PREFIX
@@ -36,6 +37,13 @@ def list_files_local(folder, subfolder=None):
 
   full_path = os.path.join(folder, key)
   return [os.path.join(key, file) for file in os.listdir(full_path) if os.path.isfile(os.path.join(full_path, file))]
+
+
+def folder_backup(repo_path, folder, password):
+  env = os.environ.copy()
+  env['RESTIC_PASSWORD'] = password
+
+  subprocess.run(['restic', '-r', repo_path, 'backup', folder], env=env, check=True)
 
 
 def get_local_key(key):
