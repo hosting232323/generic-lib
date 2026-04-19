@@ -34,7 +34,7 @@ def check_mismatch(db_files, folder, label, storage_type, subfolder=None):
 
   send_telegram_message(
     '\n'.join(
-      [f'*📊 Report Check Mismatch*\n{label}\n']
+      [f'*📊 Report Check Mismatch*\n▶️ {label}\n']
       + format_mismatch_message(
         db_files, files, '\n*❌ File presenti solo nel DB ({}):*', '\n✔️ Nessun file solo nel DB'
       )
