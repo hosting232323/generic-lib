@@ -26,7 +26,7 @@ def get_all_filenames(folder, storage_type, subfolder=None):
     return list_files_local(folder, subfolder)
 
 
-def check_mismatch(db_files, folder, storage_type, subfolder=None):
+def check_mismatch(db_files, folder, label, storage_type, subfolder=None):
   if storage_type == 's3':
     files = [path for path in list_files_in_s3(folder, subfolder) if not path.endswith('/')]
   elif storage_type == 'local':
@@ -34,7 +34,7 @@ def check_mismatch(db_files, folder, storage_type, subfolder=None):
 
   send_telegram_message(
     '\n'.join(
-      ['*📊 Report Check Mismatch*\n']
+      [f'*📊 Report Check Mismatch*\n{label}\n']
       + format_mismatch_message(
         db_files, files, '\n*❌ File presenti solo nel DB ({}):*', '\n✔️ Nessun file solo nel DB'
       )
