@@ -3,7 +3,6 @@ from pathlib import Path
 from ..telegram import send_telegram_message
 from .local import upload_file_local, delete_file_local, list_files_local
 from .aws import list_files_in_s3, upload_file_to_s3, delete_file_from_s3
-from .local import upload_file_local, delete_file_local, list_files_local, zip_folder_local
 
 
 def upload_file(content, filename, folder, storage_type, subfolder=None):
@@ -57,8 +56,3 @@ def format_mismatch_message(first_list: list, second_list: list, success_text: s
     if len(mismatch_lines) == 0
     else ([success_text.format(len(mismatch_lines)), '```'] + mismatch_lines + ['```'])
   )
-
-
-def zip_folder(folder_path, storage_type, dest_folder):
-  if storage_type == 'local':
-    return zip_folder_local(folder_path, dest_folder)

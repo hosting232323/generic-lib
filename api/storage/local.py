@@ -3,7 +3,7 @@ import zipfile
 import paramiko
 import subprocess
 from flask import request
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from ..settings import IS_DEV, API_PREFIX
 
@@ -51,34 +51,18 @@ def folder_backup(repo_path, folder, password, server_name, sftp_user=None, sftp
   subprocess.run(['restic', '-r', repo_path, 'backup', folder, '--host', server_name], env=env, check=True)
 
 
-def zip_folder_local(base_folder, dest_folder):
-  today = datetime.now().date()
-  yesterday_str = (today - timedelta(days=1)).strftime('%Y-%m-%d')
-  today_path = os.path.join(base_folder, today.strftime('%Y-%m-%d'))
-  yesterday_path = os.path.join(base_folder, yesterday_str)
-  rolling_zip_path = os.path.join(dest_folder, 'current.zip')
+def zip_folder(source_folder, dest_folder):
+  filename = f'{datetime.now().strftime("%y%m%d%H%M%S")}.zip'
+  zip_path = os.path.join(dest_folder, filename)
 
-  if os.path.exists(today_path):
-    with zipfile.ZipFile(rolling_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-      for root, _, files in os.walk(today_path):
-        for file in files:
-          file_path = os.path.join(root, file)
-          arcname = os.path.relpath(file_path, start=today_path)
-          zipf.write(file_path, arcname)
+  with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+    for root, _, files in os.walk(source_folder):
+      for file in files:
+        file_path = os.path.join(root, file)
+        arcname = os.path.relpath(file_path, start=source_folder)
+        zipf.write(file_path, arcname)
 
-  final_zip_path = os.path.join(dest_folder, f'{yesterday_str}.zip')
-  if not os.path.exists(final_zip_path) and os.path.exists(yesterday_path):
-    with zipfile.ZipFile(final_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-      for root, _, files in os.walk(yesterday_path):
-        for file in files:
-          file_path = os.path.join(root, file)
-          arcname = os.path.relpath(file_path, start=yesterday_path)
-          zipf.write(file_path, arcname)
-
-  return {
-    'current': rolling_zip_path if os.path.exists(today_path) else None,
-    'final': final_zip_path if os.path.exists(final_zip_path) else None,
-  }
+  return zip_path
 
 
 def upload_large_file_to_pc(file_path, remote_host, remote_user, remote_path, password, port=22):
