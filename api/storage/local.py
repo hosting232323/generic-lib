@@ -39,11 +39,11 @@ def list_files_local(folder, subfolder=None):
   return [os.path.join(key, file) for file in os.listdir(full_path) if os.path.isfile(os.path.join(full_path, file))]
 
 
-def folder_backup(repo_path, folder, password):
+def folder_backup(repo_path, folder, password, server_name):
   env = os.environ.copy()
   env['RESTIC_PASSWORD'] = password
 
-  subprocess.run(['restic', '-r', repo_path, 'backup', folder], env=env, check=True)
+  subprocess.run(['restic', '-r', repo_path, 'backup', folder, '--host', server_name], env=env, check=True)
 
 
 def get_local_key(key):
