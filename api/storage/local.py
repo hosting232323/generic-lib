@@ -39,9 +39,11 @@ def list_files_local(folder, subfolder=None):
   return [os.path.join(key, file) for file in os.listdir(full_path) if os.path.isfile(os.path.join(full_path, file))]
 
 
-def folder_backup(repo_path, folder, password, server_name):
+def folder_backup(repo_path, folder, password, server_name, sftp_user=None, sftp_host=None):
   env = os.environ.copy()
   env['RESTIC_PASSWORD'] = password
+  if sftp_user:
+    repo_path = f'sftp:{sftp_user}@{sftp_host}:{repo_path}'
 
   subprocess.run(['restic', '-r', repo_path, 'backup', folder, '--host', server_name], env=env, check=True)
 
