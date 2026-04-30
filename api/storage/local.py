@@ -19,7 +19,11 @@ def upload_file_local(content, filename, folder, subfolder=None):
 
   with open(full_path, 'wb') as file:
     file.write(content.read())
-  return f'http{"s" if not IS_DEV else ""}://{request.host}{f"/{API_PREFIX}" if API_PREFIX else ""}/photos/{key}'
+
+  return {
+    "url": f'http{"s" if not IS_DEV else ""}://{request.host}{f"/{API_PREFIX}" if API_PREFIX else ""}/photos/{key}',
+    "local_path": full_path
+  }
 
 
 def delete_file_local(filename, folder, subfolder=None):
