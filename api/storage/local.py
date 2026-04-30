@@ -19,8 +19,8 @@ def upload_file_local(content, filename, folder, subfolder=None):
     file.write(content.read())
 
   return {
-    "url": f'http{"s" if not IS_DEV else ""}://{request.host}{f"/{API_PREFIX}" if API_PREFIX else ""}/photos/{key}',
-    "local_path": full_path
+    'url': f'http{"s" if not IS_DEV else ""}://{request.host}{f"/{API_PREFIX}" if API_PREFIX else ""}/photos/{key}',
+    'local_path': full_path,
   }
 
 
@@ -54,15 +54,10 @@ def folder_backup(repo_path, folder, password, server_name, sftp_user=None, sftp
 
 
 def send_file_or_folder(file_folder, remote_path, user, host):
-  subprocess.run([
-    "rsync",
-    "-avz",
-    "--partial",
-    "--progress",
-    "--append-verify",
-    file_folder,
-    f"{user}@{host}:{remote_path}"
-  ], check=True)
+  subprocess.run(
+    ['rsync', '-avz', '--partial', '--progress', '--append-verify', file_folder, f'{user}@{host}:{remote_path}'],
+    check=True,
+  )
 
 
 def get_local_key(key):
