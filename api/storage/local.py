@@ -1,6 +1,4 @@
 import os
-import zipfile
-import paramiko
 import subprocess
 from flask import request
 from datetime import datetime
