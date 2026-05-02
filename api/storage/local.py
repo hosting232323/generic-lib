@@ -1,9 +1,5 @@
 import os
-import subprocess
-from flask import request
-from datetime import datetime
-
-from ..settings import IS_DEV, API_PREFIX
+from ..settings import IS_DEV
 
 
 def upload_file_local(content, filename, folder, subfolder=None):
@@ -18,10 +14,7 @@ def upload_file_local(content, filename, folder, subfolder=None):
   with open(full_path, 'wb') as file:
     file.write(content.read())
 
-  return {
-    'url': f'http{"s" if not IS_DEV else ""}://{request.host}{f"/{API_PREFIX}" if API_PREFIX else ""}/photos/{key}',
-    'local_path': full_path,
-  }
+  return full_path
 
 
 def delete_file_local(filename, folder, subfolder=None):
@@ -42,22 +35,6 @@ def list_files_local(folder, subfolder=None):
 
   full_path = os.path.join(folder, key)
   return [os.path.join(key, file) for file in os.listdir(full_path) if os.path.isfile(os.path.join(full_path, file))]
-
-
-def folder_backup(repo_path, folder, password, server_name, sftp_user=None, sftp_host=None):
-  env = os.environ.copy()
-  env['RESTIC_PASSWORD'] = password
-  if sftp_user:
-    repo_path = f'sftp:{sftp_user}@{sftp_host}:{repo_path}'
-
-  subprocess.run(['restic', '-r', repo_path, 'backup', folder, '--host', server_name], env=env, check=True)
-
-
-def send_file_or_folder(file_folder, remote_path, user, host):
-  subprocess.run(
-    ['rsync', '-avz', '--partial', '--progress', '--append-verify', file_folder, f'{user}@{host}:{remote_path}'],
-    check=True,
-  )
 
 
 def get_local_key(key):

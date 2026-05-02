@@ -3,6 +3,8 @@ import sys
 import subprocess
 from datetime import datetime
 
+from ..api.storage.server import send_file_or_folder
+from ..api.settings import SFTP_USER, SFTP_HOST
 from api.storage import upload_file, get_all_filenames, delete_file
 
 
@@ -40,9 +42,11 @@ def data_import(db_url: str, filename: str):
 def db_backup(db_url: str, folder: str, storage_type, subfolder: str = None):
   filename = data_export(db_url)
   with open(filename, 'rb') as content:
-    file_url = upload_file(content, filename, folder, storage_type, subfolder)
+    local_path = upload_file(content, filename, folder, storage_type, subfolder)
   delete_file(filename, '', 'local')
 
+  if SFTP_USER:
+    send_file_or_folder(local_path, )
   backups = get_all_filenames(folder, storage_type, subfolder)
   dump_files = [f for f in backups if f.lower().endswith('.dump')]
   dump_files.sort()
@@ -57,6 +61,5 @@ def db_backup(db_url: str, folder: str, storage_type, subfolder: str = None):
   return {
     'status': 'ok',
     'message': 'Backup eseguito correttamente',
-    'file_url': file_url['url'],
-    'local_path': file_url['local_path'],
+    'local_path': local_path,
   }
