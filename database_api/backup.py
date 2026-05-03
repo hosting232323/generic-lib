@@ -46,7 +46,9 @@ def db_backup(db_url: str, folder: str, storage_type, subfolder: str = None):
   delete_file(filename, '', 'local')
 
   if SFTP_USER:
-    send_file_or_folder(local_path, )
+    send_file_or_folder(
+      local_path,
+    )
   backups = get_all_filenames(folder, storage_type, subfolder)
   dump_files = [f for f in backups if f.lower().endswith('.dump')]
   dump_files.sort()

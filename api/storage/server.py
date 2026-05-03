@@ -1,20 +1,53 @@
 import os
 import subprocess
 
-from ..settings import SFTP_USER, SFTP_HOST
+from ..settings import SFTP_USER, SFTP_HOST, RESTIC_PASSWORD, BACKUP_FOLDER, SERVER_NAME
 
 
-def folder_backup(repo_path, folder, password, server_name):
+def folder_backup_server(folder_to_backup):
   env = os.environ.copy()
-  env['RESTIC_PASSWORD'] = password
-  if SFTP_USER:
-    repo_path = f'sftp:{SFTP_USER}@{SFTP_HOST}:{repo_path}'
 
-  subprocess.run(['restic', '-r', repo_path, 'backup', folder, '--host', server_name], env=env, check=True)
+  if not RESTIC_PASSWORD:
+    raise ValueError('RESTIC_PASSWORD non configurata')
+  env['RESTIC_PASSWORD'] = RESTIC_PASSWORD
 
+  if not SFTP_USER:
+    raise ValueError('SFTP_USER non configurato')
 
-def send_file_or_folder(file_folder, remote_path):
+  if not SFTP_HOST:
+    raise ValueError('SFTP_HOST non configurato')
+
+  if not BACKUP_FOLDER:
+    raise ValueError('BACKUP_FOLDER non configurata')
+
+  if not SERVER_NAME:
+    raise ValueError('SERVER_NAME non configurato')
+
   subprocess.run(
-    ['rsync', '-avz', '--partial', '--progress', '--append-verify', file_folder, f'{SFTP_USER}@{SFTP_HOST}:{remote_path}'],
+    [
+      'restic',
+      '-r',
+      f'sftp:{SFTP_USER}@{SFTP_HOST}:{os.path.join(BACKUP_FOLDER, "folder-backup")}',
+      'backup',
+      folder_to_backup,
+      '--host',
+      SERVER_NAME,
+    ],
+    env=env,
+    check=True,
+  )
+
+
+def send_file_or_folder_server(file_folder, remote_path):
+  subprocess.run(
+    [
+      'rsync',
+      '-avz',
+      '--partial',
+      '--progress',
+      '--append-verify',
+      file_folder,
+      f'{SFTP_USER}@{SFTP_HOST}:{remote_path}',
+    ],
     check=True,
   )

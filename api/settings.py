@@ -6,8 +6,13 @@ load_dotenv()
 
 
 SWAGGER_KEY = os.environ.get('SWAGGER_KEY')
+
 SFTP_USER = os.environ.get('SFTP_USER', None)
 SFTP_HOST = os.environ.get('SFTP_HOST', None)
+SERVER_NAME = os.environ.get('SERVER_NAME', None)
+BACKUP_FOLDER = os.environ.get('BACKUP_FOLDER', None)
+RESTIC_PASSWORD = os.environ.get('RESTIC_PASSWORD', None)
+
 IS_DEV = int(os.environ.get('IS_DEV', 1)) == 1
 API_PREFIX = os.environ.get('API_PREFIX', None)
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
