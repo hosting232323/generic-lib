@@ -40,7 +40,7 @@ def data_import(db_url: str, filename: str):
 def db_backup(db_url: str, folder: str, storage_type, subfolder: str = None):
   filename = data_export(db_url)
   with open(filename, 'rb') as content:
-    local_path = upload_file(content, filename, folder, storage_type, subfolder)
+    file_path = upload_file(content, filename, folder, storage_type, subfolder)
   delete_file(filename, '', 'local')
 
   backups = get_all_filenames(folder, storage_type, subfolder)
@@ -57,5 +57,5 @@ def db_backup(db_url: str, folder: str, storage_type, subfolder: str = None):
   return {
     'status': 'ok',
     'message': 'Backup eseguito correttamente',
-    'local_path': local_path,
+    'file_path': file_path,
   }
