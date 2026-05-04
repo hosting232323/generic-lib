@@ -12,9 +12,29 @@ POSTGRES_BACKUP_DAYS = int(os.environ.get('POSTGRES_BACKUP_DAYS', 14))
 
 def data_export(db_url: str):
   filename = f'{datetime.now().strftime("%y%m%d%H%M%S")}.dump'
-  subprocess.run(
-    ['pg_dump', f'--dbname={db_url}', '--blobs', '--clean', '-Fc', '--verbose', '-f', filename], check=True
+  process = subprocess.Popen(
+    [
+      'pg_dump',
+      f'--dbname={db_url}',
+      '--blobs',
+      '--clean',
+      '-Fc',
+      '--verbose',
+      '-f',
+      filename
+    ],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.STDOUT,
+    text=True
   )
+
+  for line in process.stdout:
+    print(line.strip())
+
+  process.wait()
+
+  if process.returncode != 0:
+    raise Exception("pg_dump fallito")
   return filename
 
 
