@@ -1,5 +1,6 @@
 import os
 import sys
+import threading
 import subprocess
 from datetime import datetime
 
@@ -38,24 +39,32 @@ def data_import(db_url: str, filename: str):
 
 
 def db_backup(db_url: str, folder: str, storage_type, subfolder: str = None):
-  filename = data_export(db_url)
-  with open(filename, 'rb') as content:
-    file_path = upload_file(content, filename, folder, storage_type, subfolder)
-  delete_file(filename, '', 'local')
+  def _backup_job():
+    try:
+      filename = data_export(db_url)
 
-  backups = get_all_filenames(folder, storage_type, subfolder)
-  dump_files = [f for f in backups if f.lower().endswith('.dump')]
-  dump_files.sort()
-  if len(dump_files) > POSTGRES_BACKUP_DAYS:
-    files_to_delete = dump_files[: len(dump_files) - POSTGRES_BACKUP_DAYS]
-    for file_to_delete in files_to_delete:
-      filename = os.path.basename(file_to_delete)
-      subfolder_path = os.path.dirname(file_to_delete) or None
+      with open(filename, 'rb') as content:
+        upload_file(content, filename, folder, storage_type, subfolder)
 
-      delete_file(filename, folder, storage_type, subfolder_path)
+      delete_file(filename, '', 'local')
 
-  return {
-    'status': 'ok',
-    'message': 'Backup eseguito correttamente',
-    'file_path': file_path,
-  }
+      backups = get_all_filenames(folder, storage_type, subfolder)
+      dump_files = [f for f in backups if f.lower().endswith('.dump')]
+      dump_files.sort()
+
+      if len(dump_files) > POSTGRES_BACKUP_DAYS:
+        files_to_delete = dump_files[: len(dump_files) - POSTGRES_BACKUP_DAYS]
+
+        for file_to_delete in files_to_delete:
+          filename = os.path.basename(file_to_delete)
+          subfolder_path = os.path.dirname(file_to_delete) or None
+
+          delete_file(filename, folder, storage_type, subfolder_path)
+
+    except Exception as e:
+      print(f'[db_backup ERROR] {e}') # noqa: T201
+
+  thread = threading.Thread(target=_backup_job, daemon=True)
+  thread.start()
+
+  return {'status': 'ok', 'message': 'Backup avviato in background'}
