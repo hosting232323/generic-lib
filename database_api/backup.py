@@ -62,7 +62,7 @@ def db_backup(db_url: str, folder: str, storage_type, subfolder: str = None):
           delete_file(filename, folder, storage_type, subfolder_path)
 
     except Exception as e:
-      print(f'[db_backup ERROR] {e}') # noqa: T201
+      print(f'[db_backup ERROR] {e}')  # noqa: T201
 
   thread = threading.Thread(target=_backup_job, daemon=True)
   thread.start()
