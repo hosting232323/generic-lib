@@ -2,7 +2,7 @@ import os
 import subprocess
 from flask import request
 
-from ..settings import IS_DEV, API_PREFIX
+from ..settings import IS_DEV, API_PREFIX, RESTIC_PASSWORD, BACKUP_FOLDER, SERVER_NAME
 
 
 def upload_file_local(content, filename, folder, subfolder=None):
@@ -39,13 +39,24 @@ def list_files_local(folder, subfolder=None):
   return [os.path.join(key, file) for file in os.listdir(full_path) if os.path.isfile(os.path.join(full_path, file))]
 
 
-def folder_backup(repo_path, folder, password, server_name, sftp_user=None, sftp_host=None):
+def folder_backup_local(folder):
   env = os.environ.copy()
-  env['RESTIC_PASSWORD'] = password
-  if sftp_user:
-    repo_path = f'sftp:{sftp_user}@{sftp_host}:{repo_path}'
 
-  subprocess.run(['restic', '-r', repo_path, 'backup', folder, '--host', server_name], env=env, check=True)
+  if not RESTIC_PASSWORD:
+    raise ValueError('RESTIC_PASSWORD non configurata')
+  env['RESTIC_PASSWORD'] = RESTIC_PASSWORD
+
+  if not BACKUP_FOLDER:
+    raise ValueError('BACKUP_FOLDER non configurata')
+
+  if not SERVER_NAME:
+    raise ValueError('SERVER_NAME non configurato')
+
+  subprocess.run(
+    ['restic', '-r', os.path.join(BACKUP_FOLDER, 'folder-backup'), 'backup', folder, '--host', SERVER_NAME],
+    env=env,
+    check=True,
+  )
 
 
 def get_local_key(key):
