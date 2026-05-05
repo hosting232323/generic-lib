@@ -52,7 +52,11 @@ def folder_backup_local(folder):
   if not SERVER_NAME:
     raise ValueError('SERVER_NAME non configurato')
 
-  subprocess.run(['restic', '-r', os.path.join(BACKUP_FOLDER, "folder-backup"), 'backup', folder, '--host', SERVER_NAME], env=env, check=True)
+  subprocess.run(
+    ['restic', '-r', os.path.join(BACKUP_FOLDER, 'folder-backup'), 'backup', folder, '--host', SERVER_NAME],
+    env=env,
+    check=True,
+  )
 
 
 def get_local_key(key):
