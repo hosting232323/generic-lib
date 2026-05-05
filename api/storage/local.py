@@ -39,8 +39,9 @@ def list_files_local(folder, subfolder=None):
   return [os.path.join(key, file) for file in os.listdir(full_path) if os.path.isfile(os.path.join(full_path, file))]
 
 
-def folder_backup(folder):
+def folder_backup_local(folder):
   env = os.environ.copy()
+
   if not RESTIC_PASSWORD:
     raise ValueError('RESTIC_PASSWORD non configurata')
   env['RESTIC_PASSWORD'] = RESTIC_PASSWORD
