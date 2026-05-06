@@ -52,6 +52,5 @@ def db_backup(db_url: str, folder: str, storage_type, subfolder: str = None):
     for file_to_delete in files_to_delete:
       filename = os.path.basename(file_to_delete)
       subfolder_path = os.path.dirname(file_to_delete) or None
-
       delete_file(filename, folder, storage_type, subfolder_path)
   return {'status': 'ok', 'message': 'Backup eseguito correttamente', 'file_url': file_url}
