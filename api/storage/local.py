@@ -15,7 +15,6 @@ def upload_file_local(content, filename, folder, subfolder=None):
 
   with open(full_path, 'wb') as file:
     file.write(content.read())
-
   return full_path
 
 
