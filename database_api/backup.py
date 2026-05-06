@@ -1,6 +1,5 @@
 import os
 import sys
-import threading
 import subprocess
 from datetime import datetime
 
