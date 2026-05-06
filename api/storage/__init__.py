@@ -22,7 +22,7 @@ def delete_file(filename, folder, storage_type, subfolder=None):
   elif storage_type == 'local':
     delete_file_local(filename, folder, subfolder)
   elif storage_type == 'server':
-    return delete_file_server(folder, subfolder)
+    return delete_file_server(filename, folder, subfolder)
 
 
 def get_all_filenames(folder, storage_type, subfolder=None):

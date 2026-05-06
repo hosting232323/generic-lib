@@ -21,6 +21,49 @@ def storage_decorator(func):
 
 
 @storage_decorator
+def upload_file_server(content, filename, folder, subfolder=None):
+  if subfolder:
+    key = f'{subfolder}/{filename}'
+  else:
+    key = get_local_key(filename)
+
+  remote_path = os.path.join(folder, key)
+
+  subprocess.run(
+    [
+      'ssh',
+      f'{SFTP_USER}@{SFTP_HOST}',
+      f'mkdir -p "{os.path.dirname(remote_path)}"',
+    ],
+    check=True,
+  )
+
+  tmp_path = None
+  try:
+    with tempfile.NamedTemporaryFile(delete=False) as tmp:
+      shutil.copyfileobj(content, tmp)
+      tmp_path = tmp.name
+
+    subprocess.run(
+      [
+        'rsync',
+        '-avz',
+        '--partial',
+        '--append-verify',
+        tmp_path,
+        f'{SFTP_USER}@{SFTP_HOST}:{remote_path}',
+      ],
+      check=True,
+    )
+
+  finally:
+    if tmp_path and os.path.exists(tmp_path):
+      os.remove(tmp_path)
+
+  return remote_path
+
+
+@storage_decorator
 def delete_file_server(filename, folder, subfolder=None):
   if subfolder:
     key = os.path.join(folder, subfolder)
@@ -87,49 +130,6 @@ def folder_backup_server(folder_to_backup):
     env=env,
     check=True,
   )
-
-
-@storage_decorator
-def upload_file_server(content, filename, folder, subfolder=None):
-  if subfolder:
-    key = f'{subfolder}/{filename}'
-  else:
-    key = get_local_key(filename)
-
-  remote_path = os.path.join(folder, key)
-
-  subprocess.run(
-    [
-      'ssh',
-      f'{SFTP_USER}@{SFTP_HOST}',
-      f'mkdir -p "{os.path.dirname(remote_path)}"',
-    ],
-    check=True,
-  )
-
-  tmp_path = None
-  try:
-    with tempfile.NamedTemporaryFile(delete=False) as tmp:
-      shutil.copyfileobj(content, tmp)
-      tmp_path = tmp.name
-
-    subprocess.run(
-      [
-        'rsync',
-        '-avz',
-        '--partial',
-        '--append-verify',
-        tmp_path,
-        f'{SFTP_USER}@{SFTP_HOST}:{remote_path}',
-      ],
-      check=True,
-    )
-
-  finally:
-    if tmp_path and os.path.exists(tmp_path):
-      os.remove(tmp_path)
-
-  return remote_path
 
 
 def get_local_key(key):
