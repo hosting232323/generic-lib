@@ -41,13 +41,6 @@ def folder_backup(folder_to_backup, storage_type):
     return folder_backup_server(folder_to_backup)
 
 
-def folder_backup(folder_to_backup, storage_type):
-  if storage_type == 'local':
-    return folder_backup_local(folder_to_backup)
-  elif storage_type == 'server':
-    return folder_backup_server(folder_to_backup)
-
-
 def check_mismatch(db_files, folder, label, storage_type, subfolder=None):
   if storage_type == 's3':
     files = [path for path in list_files_in_s3(folder, subfolder) if not path.endswith('/')]
