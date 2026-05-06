@@ -3,16 +3,13 @@ import shutil
 import tempfile
 import subprocess
 
-from ..settings import IS_DEV, SFTP_USER, SFTP_HOST, RESTIC_PASSWORD, BACKUP_FOLDER, SERVER_NAME
+from ..settings import IS_DEV, BACKUP_SSH_CONFIG, RESTIC_PASSWORD, BACKUP_FOLDER, SERVER_NAME
 
 
 def storage_decorator(func):
   def wrapper(*args, **kwargs):
-    if not SFTP_USER:
-      raise ValueError('SFTP_USER non configurato')
-
-    if not SFTP_HOST:
-      raise ValueError('SFTP_HOST non configurato')
+    if not BACKUP_SSH_CONFIG:
+      raise ValueError('BACKUP_SSH_CONFIG non configurato')
 
     return func(*args, **kwargs)
 
@@ -32,7 +29,7 @@ def upload_file_server(content, filename, folder, subfolder=None):
   subprocess.run(
     [
       'ssh',
-      f'{SFTP_USER}@{SFTP_HOST}',
+      f'{BACKUP_SSH_CONFIG}',
       f'mkdir -p "{os.path.dirname(remote_path)}"',
     ],
     check=True,
@@ -51,7 +48,7 @@ def upload_file_server(content, filename, folder, subfolder=None):
         '--partial',
         '--append-verify',
         tmp_path,
-        f'{SFTP_USER}@{SFTP_HOST}:{remote_path}',
+        f'{BACKUP_SSH_CONFIG}:{remote_path}',
       ],
       check=True,
     )
@@ -75,7 +72,7 @@ def delete_file_server(filename, folder, subfolder=None):
   subprocess.run(
     [
       'ssh',
-      f'{SFTP_USER}@{SFTP_HOST}',
+      f'{BACKUP_SSH_CONFIG}',
       f'rm "{os.path.join(key, filename)}"',
     ],
     check=True,
@@ -92,7 +89,7 @@ def list_files_server(folder, subfolder=None):
   result = subprocess.run(
     [
       'ssh',
-      f'{SFTP_USER}@{SFTP_HOST}',
+      f'{BACKUP_SSH_CONFIG}',
       f'find "{os.path.join(folder, key)}" -maxdepth 1 -type f -printf "%f\\n"',
     ],
     capture_output=True,
@@ -121,7 +118,7 @@ def folder_backup_server(folder_to_backup):
     [
       'restic',
       '-r',
-      f'sftp:{SFTP_USER}@{SFTP_HOST}:{os.path.join(BACKUP_FOLDER, "folder-backup")}',
+      f'sftp:{BACKUP_SSH_CONFIG}:{os.path.join(BACKUP_FOLDER, "folder-backup")}',
       'backup',
       folder_to_backup,
       '--host',
