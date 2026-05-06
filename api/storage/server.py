@@ -1,4 +1,6 @@
 import os
+import shutil
+import tempfile
 import subprocess
 
 from ..settings import IS_DEV, SFTP_USER, SFTP_HOST, RESTIC_PASSWORD, BACKUP_FOLDER, SERVER_NAME
@@ -105,17 +107,27 @@ def upload_file_server(content, filename, folder, subfolder=None):
     check=True,
   )
 
-  subprocess.run(
-    [
-      'rsync',
-      '-avz',
-      '--partial',
-      '--append-verify',
-      content,
-      f'{SFTP_USER}@{SFTP_HOST}:{remote_path}',
-    ],
-    check=True,
-  )
+  tmp_path = None
+  try:
+    with tempfile.NamedTemporaryFile(delete=False) as tmp:
+      shutil.copyfileobj(content, tmp)
+      tmp_path = tmp.name
+
+    subprocess.run(
+      [
+        'rsync',
+        '-avz',
+        '--partial',
+        '--append-verify',
+        tmp_path,
+        f'{SFTP_USER}@{SFTP_HOST}:{remote_path}',
+      ],
+      check=True,
+    )
+
+  finally:
+    if tmp_path and os.path.exists(tmp_path):
+      os.remove(tmp_path)
 
   return remote_path
 
