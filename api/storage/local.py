@@ -1,8 +1,8 @@
 import os
 import subprocess
-from flask import request
 
-from ..settings import IS_DEV, API_PREFIX, RESTIC_PASSWORD, BACKUP_FOLDER, SERVER_NAME
+from .utils import get_local_key
+from ..settings import RESTIC_PASSWORD, BACKUP_FOLDER, SERVER_NAME
 
 
 def upload_file_local(content, filename, folder, subfolder=None):
@@ -16,7 +16,7 @@ def upload_file_local(content, filename, folder, subfolder=None):
 
   with open(full_path, 'wb') as file:
     file.write(content.read())
-  return f'http{"s" if not IS_DEV else ""}://{request.host}{f"/{API_PREFIX}" if API_PREFIX else ""}/photos/{key}'
+  return full_path
 
 
 def delete_file_local(filename, folder, subfolder=None):
@@ -39,7 +39,7 @@ def list_files_local(folder, subfolder=None):
   return [os.path.join(key, file) for file in os.listdir(full_path) if os.path.isfile(os.path.join(full_path, file))]
 
 
-def folder_backup_local(folder):
+def folder_backup_local(folder_to_backup):
   env = os.environ.copy()
 
   if not RESTIC_PASSWORD:
@@ -53,16 +53,7 @@ def folder_backup_local(folder):
     raise ValueError('SERVER_NAME non configurato')
 
   subprocess.run(
-    ['restic', '-r', os.path.join(BACKUP_FOLDER, 'folder-backup'), 'backup', folder, '--host', SERVER_NAME],
+    ['restic', '-r', os.path.join(BACKUP_FOLDER, 'folder-backup'), 'backup', folder_to_backup, '--host', SERVER_NAME],
     env=env,
     check=True,
   )
-
-
-def get_local_key(key):
-  if IS_DEV is None:
-    return key
-  elif IS_DEV:
-    return f'test/{key}'
-  else:
-    return f'prod/{key}'
