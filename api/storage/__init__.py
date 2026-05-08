@@ -1,3 +1,5 @@
+import logging
+import threading
 from pathlib import Path
 
 from .server import folder_backup_server
@@ -35,10 +37,21 @@ def get_all_filenames(folder, storage_type, subfolder=None):
 
 
 def folder_backup(folder_to_backup, storage_type):
-  if storage_type == 'local':
-    return folder_backup_local(folder_to_backup)
-  elif storage_type == 'server':
-    return folder_backup_server(folder_to_backup)
+  def _run_backup():
+    try:
+      if storage_type == 'local':
+        return folder_backup_local(folder_to_backup)
+      elif storage_type == 'server':
+        return folder_backup_server(folder_to_backup)
+    except Exception:
+      logging.exception("Errore durante folder backup")
+
+  threading.Thread(target=_run_backup, daemon=True).start()
+
+  return {
+    'status': 'ok',
+    'message': 'Backup cartella avviato in background'
+  }
 
 
 def check_mismatch(db_files, folder, label, storage_type, subfolder=None):
