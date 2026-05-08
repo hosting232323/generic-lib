@@ -1,10 +1,10 @@
 import os
 import sys
-import logging
 import threading
 import subprocess
 from datetime import datetime
 
+from api.telegram import send_telegram_message
 from api.storage import upload_file, get_all_filenames, delete_file
 
 
@@ -59,7 +59,13 @@ def db_backup(db_url: str, folder: str, storage_type, subfolder: str = None):
           delete_file(filename, folder, storage_type, subfolder_path)
 
     except Exception as e:
-      logging.exception(f"Errore durante backup: {e}")
+      send_telegram_message(
+        f"❌ DB backup fallito\n"
+        f"- DB: {db_url}\n"
+        f"- Folder: {folder}\n"
+        f"- Storage: {storage_type}\n"
+        f"- Error: {str(e)}"
+      )
   
   threading.Thread(target=_run_backup, daemon=True).start()
 

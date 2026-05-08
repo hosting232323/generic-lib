@@ -1,4 +1,3 @@
-import logging
 import threading
 from pathlib import Path
 
@@ -43,8 +42,13 @@ def folder_backup(folder_to_backup, storage_type):
         return folder_backup_local(folder_to_backup)
       elif storage_type == 'server':
         return folder_backup_server(folder_to_backup)
-    except Exception:
-      logging.exception("Errore durante folder backup")
+    except Exception as e:
+      send_telegram_message(
+        f"❌ Errore folder backup\n"
+        f"Storage: {storage_type}\n"
+        f"Folder: {folder_to_backup}\n"
+        f"Error: {str(e)}"
+      )
 
   threading.Thread(target=_run_backup, daemon=True).start()
 
