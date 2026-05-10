@@ -4,7 +4,7 @@ import tempfile
 import subprocess
 
 from .utils import get_local_key
-from ..settings import BACKUP_SSH_CONFIG, RESTIC_PASSWORD, BACKUP_FOLDER, SERVER_NAME
+from ..settings import BACKUP_SSH_CONFIG, RESTIC_PASSWORD, BACKUP_FOLDER, SERVER_NAME, PROJECT_NAME
 
 
 def storage_decorator(func):
@@ -114,11 +114,14 @@ def folder_backup_server(folder_to_backup):
   if not SERVER_NAME:
     raise ValueError('SERVER_NAME non configurato')
 
+  if not PROJECT_NAME:
+    raise ValueError('PROJECT_NAME non configurato')
+
   subprocess.run(
     [
       'restic',
       '-r',
-      f'sftp:{BACKUP_SSH_CONFIG}:{os.path.join(BACKUP_FOLDER, "folder-backup")}',
+      f'sftp:{BACKUP_SSH_CONFIG}:{os.path.join(BACKUP_FOLDER, "folder-backup", PROJECT_NAME)}',
       'backup',
       folder_to_backup,
       '--host',
