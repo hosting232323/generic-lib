@@ -4,7 +4,7 @@ import tempfile
 import subprocess
 
 from .utils import get_local_key
-from ..settings import BACKUP_SSH_CONFIG, RESTIC_PASSWORD, BACKUP_FOLDER, SERVER_NAME, RESTIC_PASSWORD_TEST
+from ..settings import BACKUP_SSH_CONFIG, RESTIC_PASSWORD, BACKUP_FOLDER, SERVER_NAME
 
 
 def storage_decorator(func):
@@ -103,7 +103,7 @@ def list_files_server(folder, subfolder=None):
 
 @storage_decorator
 def folder_backup_server(folder_to_backup):
-  if not RESTIC_PASSWORD_TEST:
+  if not RESTIC_PASSWORD:
     raise ValueError('RESTIC_PASSWORD non configurata')
 
   env = os.environ.copy()
