@@ -3,10 +3,8 @@ import sys
 import subprocess
 from datetime import datetime
 
+from ..api.settings import POSTGRES_BACKUP_DAYS
 from api.storage import upload_file, get_all_filenames, delete_file
-
-
-POSTGRES_BACKUP_DAYS = int(os.environ.get('POSTGRES_BACKUP_DAYS', 14))
 
 
 def data_export(db_url: str):
