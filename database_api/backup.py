@@ -5,6 +5,7 @@ from datetime import datetime
 
 from api.settings import POSTGRES_BACKUP_DAYS
 from api.storage import upload_file, get_all_filenames, delete_file
+from api.settings import BACKUP_FOLDER
 
 
 def data_export(db_url: str):
@@ -35,13 +36,16 @@ def data_import(db_url: str, filename: str):
   )
 
 
-def db_backup(db_url: str, folder: str, storage_type, subfolder: str = None):
+def db_backup(db_url: str, storage_type):
+  if not BACKUP_FOLDER:
+    raise ValueError('BACKUP_FOLDER non configurata')
+  
   filename = data_export(db_url)
   with open(filename, 'rb') as content:
-    file_url = upload_file(content, filename, folder, storage_type, subfolder)
+    file_url = upload_file(content, filename, BACKUP_FOLDER, storage_type, 'postgres-backup')
   delete_file(filename, '', 'local')
 
-  backups = get_all_filenames(folder, storage_type, subfolder)
+  backups = get_all_filenames(BACKUP_FOLDER, storage_type, 'postgres-backup')
   dump_files = [f for f in backups if f.lower().endswith('.dump')]
   dump_files.sort()
   if len(dump_files) > POSTGRES_BACKUP_DAYS:
@@ -50,6 +54,6 @@ def db_backup(db_url: str, folder: str, storage_type, subfolder: str = None):
       filename = os.path.basename(file_to_delete)
       subfolder_path = os.path.dirname(file_to_delete) or None
 
-      delete_file(filename, folder, storage_type, subfolder_path)
+      delete_file(filename, BACKUP_FOLDER, storage_type, subfolder_path)
 
   return {'status': 'ok', 'message': 'Backup eseguito correttamente', 'file_url': file_url}
