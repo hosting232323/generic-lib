@@ -35,10 +35,7 @@ def get_all_filenames(folder, storage_type, subfolder=None):
     return list_files_server(folder, subfolder)
 
 
-def folder_backup(
-  folder_to_backup,
-  storage_type,
-):
+def folder_backup(folder_to_backup, storage_type):
   def run():
     try:
       if storage_type == 'local':
@@ -49,7 +46,7 @@ def folder_backup(
       send_telegram_message(
         '\n'.join(
           [
-            f'*📦 Report Backup Error*\n▶️ {folder_to_backup}\n',
+            f'*📦 Backup Fallito*\n▶️ {folder_to_backup}\n',
             f'*❌ Errore durante il backup ({storage_type}):*',
             f'`{type(e).__name__}: {e}`',
           ]
@@ -58,7 +55,6 @@ def folder_backup(
 
   thread = threading.Thread(target=run, daemon=True)
   thread.start()
-  thread.join()
 
 
 def check_mismatch(db_files, folder, label, storage_type, subfolder=None):
