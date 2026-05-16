@@ -1,3 +1,4 @@
+import threading
 from pathlib import Path
 
 from .server import folder_backup_server
@@ -34,11 +35,30 @@ def get_all_filenames(folder, storage_type, subfolder=None):
     return list_files_server(folder, subfolder)
 
 
-def folder_backup(folder_to_backup, storage_type):
-  if storage_type == 'local':
-    return folder_backup_local(folder_to_backup)
-  elif storage_type == 'server':
-    return folder_backup_server(folder_to_backup)
+def folder_backup(
+  folder_to_backup,
+  storage_type,
+):
+  def run():
+    try:
+      if storage_type == 'local':
+        folder_backup_local(folder_to_backup)
+      elif storage_type == 'server':
+        folder_backup_server(folder_to_backup)
+    except Exception as e:
+      send_telegram_message(
+        '\n'.join(
+          [
+            f'*📦 Report Backup Error*\n▶️ {folder_to_backup}\n',
+            f'*❌ Errore durante il backup ({storage_type}):*',
+            f'`{type(e).__name__}: {e}`',
+          ]
+        )
+      )
+
+  thread = threading.Thread(target=run, daemon=True)
+  thread.start()
+  thread.join()
 
 
 def check_mismatch(db_files, folder, label, storage_type, subfolder=None):

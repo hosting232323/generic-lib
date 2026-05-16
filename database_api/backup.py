@@ -39,7 +39,7 @@ def data_import(db_url: str, filename: str):
 def db_backup(db_url: str, storage_type):
   if not BACKUP_FOLDER:
     raise ValueError('BACKUP_FOLDER non configurata')
-  
+
   filename = data_export(db_url)
   with open(filename, 'rb') as content:
     file_url = upload_file(content, filename, BACKUP_FOLDER, storage_type, 'postgres-backup')
