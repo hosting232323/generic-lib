@@ -3,7 +3,7 @@ import sys
 import subprocess
 from datetime import datetime
 
-from ..api.settings import POSTGRES_BACKUP_DAYS
+from api.settings import POSTGRES_BACKUP_DAYS
 from api.storage import upload_file, get_all_filenames, delete_file
 
 
