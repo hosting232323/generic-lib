@@ -3,9 +3,8 @@ import sys
 import subprocess
 from datetime import datetime
 
-from api.settings import POSTGRES_BACKUP_DAYS
+from api.settings import POSTGRES_BACKUP_DAYS, BACKUP_FOLDER
 from api.storage import upload_file, get_all_filenames, delete_file
-from api.settings import BACKUP_FOLDER
 
 
 def data_export(db_url: str):
