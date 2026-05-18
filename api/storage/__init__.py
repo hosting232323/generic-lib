@@ -1,12 +1,12 @@
 import threading
 from pathlib import Path
 
+from .utils import format_mismatch_message
 from ..telegram import send_telegram_message
-from .utils import format_mismatch_message, run_backup
 
 from .aws import list_files_in_s3, upload_file_to_s3, delete_file_from_s3
-from .local import upload_file_local, delete_file_local, list_files_local
-from .server import list_files_server, delete_file_server, upload_file_server
+from .local import upload_file_local, delete_file_local, list_files_local, folder_backup_local
+from .server import list_files_server, delete_file_server, upload_file_server, folder_backup_server
 
 
 def upload_file(content, filename, folder, storage_type, subfolder=None):
@@ -39,7 +39,10 @@ def get_all_filenames(folder, storage_type, subfolder=None):
 def folder_backup(folder_to_backup, storage_type):
   def run():
     try:
-      run_backup(folder_to_backup, storage_type)
+      if storage_type == 'local':
+        folder_backup_local(folder_to_backup)
+      elif storage_type == 'server':
+        folder_backup_server(folder_to_backup)
     except Exception as e:
       send_telegram_message(
         '\n'.join(

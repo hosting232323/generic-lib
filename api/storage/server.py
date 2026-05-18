@@ -3,7 +3,7 @@ import shutil
 import tempfile
 import subprocess
 
-from .utils import get_local_key
+from .utils import get_local_key, set_backup_env
 from ..settings import BACKUP_SSH_CONFIG, BACKUP_FOLDER, SERVER_NAME
 
 
@@ -105,7 +105,7 @@ def list_files_server(folder, subfolder=None):
 
 
 @storage_decorator
-def folder_backup_server(folder_to_backup, env):
+def folder_backup_server(folder_to_backup):
   subprocess.run(
     [
       'restic',
@@ -116,6 +116,6 @@ def folder_backup_server(folder_to_backup, env):
       '--host',
       SERVER_NAME,
     ],
-    env=env,
+    env=set_backup_env(),
     check=True,
   )

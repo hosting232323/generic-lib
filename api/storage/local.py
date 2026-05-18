@@ -1,7 +1,7 @@
 import os
 import subprocess
 
-from .utils import get_local_key
+from .utils import get_local_key, set_backup_env
 from ..settings import BACKUP_FOLDER, SERVER_NAME
 
 
@@ -39,9 +39,9 @@ def list_files_local(folder, subfolder=None):
   return [os.path.join(key, file) for file in os.listdir(full_path) if os.path.isfile(os.path.join(full_path, file))]
 
 
-def folder_backup_local(folder_to_backup, env):
+def folder_backup_local(folder_to_backup):
   subprocess.run(
     ['restic', '-r', os.path.join(BACKUP_FOLDER, 'folder-backup'), 'backup', folder_to_backup, '--host', SERVER_NAME],
-    env=env,
+    env=set_backup_env(),
     check=True,
   )

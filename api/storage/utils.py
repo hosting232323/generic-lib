@@ -1,7 +1,5 @@
 import os
 
-from .local import folder_backup_local
-from .server import folder_backup_server
 from ..settings import IS_DEV, RESTIC_PASSWORD, BACKUP_FOLDER, SERVER_NAME
 
 
@@ -24,7 +22,7 @@ def format_mismatch_message(first_list: list, second_list: list, success_text: s
   )
 
 
-def run_backup(folder_to_backup, storage_type):
+def set_backup_env():
   if not RESTIC_PASSWORD:
     raise ValueError('RESTIC_PASSWORD non configurata')
 
@@ -36,7 +34,4 @@ def run_backup(folder_to_backup, storage_type):
 
   env = os.environ.copy()
   env['RESTIC_PASSWORD'] = RESTIC_PASSWORD
-  if storage_type == 'local':
-    folder_backup_local(folder_to_backup, env)
-  elif storage_type == 'server':
-    folder_backup_server(folder_to_backup, env)
+  return env
