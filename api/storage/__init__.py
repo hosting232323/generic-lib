@@ -1,10 +1,12 @@
+import threading
 from pathlib import Path
 
-from .server import folder_backup_server
 from ..telegram import send_telegram_message
+from .utils import format_mismatch_message, run_backup
+
 from .aws import list_files_in_s3, upload_file_to_s3, delete_file_from_s3
-from .local import upload_file_local, delete_file_local, list_files_local, folder_backup_local
-from .server import folder_backup_server, list_files_server, delete_file_server, upload_file_server
+from .local import upload_file_local, delete_file_local, list_files_local
+from .server import list_files_server, delete_file_server, upload_file_server
 
 
 def upload_file(content, filename, folder, storage_type, subfolder=None):
@@ -35,10 +37,22 @@ def get_all_filenames(folder, storage_type, subfolder=None):
 
 
 def folder_backup(folder_to_backup, storage_type):
-  if storage_type == 'local':
-    return folder_backup_local(folder_to_backup)
-  elif storage_type == 'server':
-    return folder_backup_server(folder_to_backup)
+  def run():
+    try:
+      run_backup(folder_to_backup, storage_type)
+    except Exception as e:
+      send_telegram_message(
+        '\n'.join(
+          [
+            f'*📦 Backup Fallito*\n▶️ `{folder_to_backup}`\n',
+            f'*❌ Errore durante il backup ({storage_type}):*',
+            f'`{type(e).__name__}: {e}`',
+          ]
+        )
+      )
+
+  thread = threading.Thread(target=run, daemon=True)
+  thread.start()
 
 
 def check_mismatch(db_files, folder, label, storage_type, subfolder=None):
@@ -60,14 +74,4 @@ def check_mismatch(db_files, folder, label, storage_type, subfolder=None):
         '\n✔️ Nessun file solo in storage',
       )
     )
-  )
-
-
-def format_mismatch_message(first_list: list, second_list: list, success_text: str, failure_text: str):
-  mismatch_lines = list(map(lambda mismatch: f'- {mismatch}', sorted(set(first_list) - set(second_list))))
-
-  return (
-    [failure_text]
-    if len(mismatch_lines) == 0
-    else ([success_text.format(len(mismatch_lines)), '```'] + mismatch_lines + ['```'])
   )

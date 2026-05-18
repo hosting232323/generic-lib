@@ -2,7 +2,7 @@ import os
 import subprocess
 
 from .utils import get_local_key
-from ..settings import RESTIC_PASSWORD, BACKUP_FOLDER, SERVER_NAME
+from ..settings import BACKUP_FOLDER, SERVER_NAME
 
 
 def upload_file_local(content, filename, folder, subfolder=None):
@@ -39,19 +39,7 @@ def list_files_local(folder, subfolder=None):
   return [os.path.join(key, file) for file in os.listdir(full_path) if os.path.isfile(os.path.join(full_path, file))]
 
 
-def folder_backup_local(folder_to_backup):
-  env = os.environ.copy()
-
-  if not RESTIC_PASSWORD:
-    raise ValueError('RESTIC_PASSWORD non configurata')
-  env['RESTIC_PASSWORD'] = RESTIC_PASSWORD
-
-  if not BACKUP_FOLDER:
-    raise ValueError('BACKUP_FOLDER non configurata')
-
-  if not SERVER_NAME:
-    raise ValueError('SERVER_NAME non configurato')
-
+def folder_backup_local(folder_to_backup, env):
   subprocess.run(
     ['restic', '-r', os.path.join(BACKUP_FOLDER, 'folder-backup'), 'backup', folder_to_backup, '--host', SERVER_NAME],
     env=env,

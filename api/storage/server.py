@@ -4,7 +4,7 @@ import tempfile
 import subprocess
 
 from .utils import get_local_key
-from ..settings import BACKUP_SSH_CONFIG, RESTIC_PASSWORD, BACKUP_FOLDER, SERVER_NAME
+from ..settings import BACKUP_SSH_CONFIG, BACKUP_FOLDER, SERVER_NAME
 
 
 def storage_decorator(func):
@@ -87,33 +87,25 @@ def list_files_server(folder, subfolder=None):
   else:
     key = f'{folder}/{get_local_key("")}'
 
-  result = subprocess.run(
-    [
-      'ssh',
-      f'{BACKUP_SSH_CONFIG}',
-      f'find "{os.path.join(folder, key)}" -maxdepth 1 -type f -printf "%f\\n"',
-    ],
-    capture_output=True,
-    text=True,
-    check=True,
-  )
-
-  return [os.path.join(key, file) for file in result.stdout.strip().splitlines()]
+  return [
+    os.path.join(key, file)
+    for file in subprocess.run(
+      [
+        'ssh',
+        f'{BACKUP_SSH_CONFIG}',
+        f'find "{os.path.join(folder, key)}" -maxdepth 1 -type f -printf "%f\\n"',
+      ],
+      capture_output=True,
+      text=True,
+      check=True,
+    )
+    .stdout.strip()
+    .splitlines()
+  ]
 
 
 @storage_decorator
-def folder_backup_server(folder_to_backup):
-  if not RESTIC_PASSWORD:
-    raise ValueError('RESTIC_PASSWORD non configurata')
-
-  env = os.environ.copy()
-  env['RESTIC_PASSWORD'] = RESTIC_PASSWORD
-  if not BACKUP_FOLDER:
-    raise ValueError('BACKUP_FOLDER non configurata')
-
-  if not SERVER_NAME:
-    raise ValueError('SERVER_NAME non configurato')
-
+def folder_backup_server(folder_to_backup, env):
   subprocess.run(
     [
       'restic',
