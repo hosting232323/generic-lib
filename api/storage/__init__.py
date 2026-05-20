@@ -1,4 +1,5 @@
 import threading
+import subprocess
 from pathlib import Path
 
 from .utils import format_mismatch_message
@@ -43,13 +44,18 @@ def folder_backup(folder_to_backup, storage_type):
         folder_backup_local(folder_to_backup)
       elif storage_type == 'server':
         folder_backup_server(folder_to_backup)
-    except Exception as e:
+    except subprocess.CalledProcessError as e:
+      error_message = (
+        e.stderr.strip()
+        or e.stdout.strip()
+        or str(e)
+      )
       send_telegram_message(
         '\n'.join(
           [
             f'*📦 Backup Fallito*\n▶️ `{folder_to_backup}`\n',
             f'*❌ Errore durante il backup ({storage_type}):*',
-            f'`{type(e).__name__}: {e}`',
+            f'`{error_message}`',
           ]
         )
       )

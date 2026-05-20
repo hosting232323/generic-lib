@@ -118,4 +118,6 @@ def folder_backup_server(folder_to_backup):
     ],
     env=set_backup_env(),
     check=True,
+    capture_output=True,
+    text=True,
   )
