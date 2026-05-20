@@ -53,7 +53,7 @@ def folder_backup(folder_to_backup, storage_type):
       send_telegram_message(
         '\n'.join(
           [
-            f'*📦 Backup Fallito*\n▶️ `{folder_to_backup}`\n',
+            f'*📦 Folder Backup Fallito*\n▶️ `{folder_to_backup}`\n',
             f'*❌ Errore durante il backup ({storage_type}):*',
             f'`{error_message}`',
           ]

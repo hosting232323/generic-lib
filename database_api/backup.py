@@ -63,7 +63,7 @@ def db_backup(db_url: str, storage_type):
       send_telegram_message(
         '\n'.join(
           [
-            f'*📦 Backup DB Fallito*\n▶️ `{db_url}`\n',
+            f'*📦 DB Backup Fallito*\n▶️ `{db_url}`\n',
             f'*❌ Errore durante il backup ({storage_type}):*',
             f'`{type(e).__name__}: {e}`',
           ]
