@@ -45,11 +45,7 @@ def folder_backup(folder_to_backup, storage_type):
       elif storage_type == 'server':
         folder_backup_server(folder_to_backup)
     except subprocess.CalledProcessError as e:
-      error_message = (
-        e.stderr.strip()
-        or e.stdout.strip()
-        or str(e)
-      )
+      error_message = e.stderr.strip() or e.stdout.strip() or str(e)
       send_telegram_message(
         '\n'.join(
           [
