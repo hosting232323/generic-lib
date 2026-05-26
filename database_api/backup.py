@@ -1,8 +1,10 @@
 import os
 import sys
+import threading
 import subprocess
 from datetime import datetime
 
+from api.telegram import send_telegram_message
 from api.settings import POSTGRES_BACKUP_DAYS, BACKUP_FOLDER
 from api.storage import upload_file, get_all_filenames, delete_file
 
@@ -36,23 +38,37 @@ def data_import(db_url: str, filename: str):
 
 
 def db_backup(db_url: str, storage_type):
-  if not BACKUP_FOLDER:
-    raise ValueError('BACKUP_FOLDER non configurata')
+  def run():
+    try:
+      if not BACKUP_FOLDER:
+        raise ValueError('BACKUP_FOLDER non configurata')
 
-  filename = data_export(db_url)
-  with open(filename, 'rb') as content:
-    file_url = upload_file(content, filename, BACKUP_FOLDER, storage_type, 'postgres-backup')
-  delete_file(filename, '', 'local')
+      filename = data_export(db_url)
+      with open(filename, 'rb') as content:
+        upload_file(content, filename, BACKUP_FOLDER, storage_type, 'postgres-backup')
+      delete_file(filename, '', 'local')
 
-  backups = get_all_filenames(BACKUP_FOLDER, storage_type, 'postgres-backup')
-  dump_files = [f for f in backups if f.lower().endswith('.dump')]
-  dump_files.sort()
-  if len(dump_files) > POSTGRES_BACKUP_DAYS:
-    files_to_delete = dump_files[: len(dump_files) - POSTGRES_BACKUP_DAYS]
-    for file_to_delete in files_to_delete:
-      filename = os.path.basename(file_to_delete)
-      subfolder_path = os.path.dirname(file_to_delete) or None
+      backups = get_all_filenames(BACKUP_FOLDER, storage_type, 'postgres-backup')
+      dump_files = [f for f in backups if f.lower().endswith('.dump')]
+      dump_files.sort()
+      if len(dump_files) > POSTGRES_BACKUP_DAYS:
+        files_to_delete = dump_files[: len(dump_files) - POSTGRES_BACKUP_DAYS]
+        for file_to_delete in files_to_delete:
+          filename = os.path.basename(file_to_delete)
+          subfolder_path = os.path.dirname(file_to_delete) or None
 
-      delete_file(filename, BACKUP_FOLDER, storage_type, subfolder_path)
+          delete_file(filename, BACKUP_FOLDER, storage_type, subfolder_path)
 
-  return {'status': 'ok', 'message': 'Backup eseguito correttamente', 'file_url': file_url}
+    except subprocess.CalledProcessError as e:
+      send_telegram_message(
+        '\n'.join(
+          [
+            f'*📦 DB Backup Fallito*\n▶️ `{db_url}`\n',
+            f'*❌ Errore durante il backup ({storage_type}):*',
+            f'`{e.stderr.strip() or e.stdout.strip() or str(e)}`',
+          ]
+        )
+      )
+
+  thread = threading.Thread(target=run, daemon=True)
+  thread.start()

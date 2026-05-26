@@ -44,4 +44,6 @@ def folder_backup_local(folder_to_backup):
     ['restic', '-r', os.path.join(BACKUP_FOLDER, 'folder-backup'), 'backup', folder_to_backup, '--host', SERVER_NAME],
     env=set_backup_env(),
     check=True,
+    capture_output=True,
+    text=True,
   )
