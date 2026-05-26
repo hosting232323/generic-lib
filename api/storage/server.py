@@ -34,6 +34,8 @@ def upload_file_server(content, filename, folder, subfolder=None):
       f'mkdir -p "{os.path.dirname(remote_path)}"',
     ],
     check=True,
+    capture_output=True,
+    text=True,
   )
 
   tmp_path = None
@@ -52,6 +54,8 @@ def upload_file_server(content, filename, folder, subfolder=None):
         f'{BACKUP_SSH_CONFIG}:{remote_path}',
       ],
       check=True,
+      capture_output=True,
+      text=True,
     )
 
   finally:
@@ -77,6 +81,8 @@ def delete_file_server(filename, folder, subfolder=None):
       f'rm "{os.path.join(key, filename)}"',
     ],
     check=True,
+    capture_output=True,
+    text=True,
   )
 
 

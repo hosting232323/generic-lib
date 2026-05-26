@@ -59,13 +59,13 @@ def db_backup(db_url: str, storage_type):
 
           delete_file(filename, BACKUP_FOLDER, storage_type, subfolder_path)
 
-    except Exception as e:
+    except subprocess.CalledProcessError as e:
       send_telegram_message(
         '\n'.join(
           [
             f'*📦 DB Backup Fallito*\n▶️ `{db_url}`\n',
             f'*❌ Errore durante il backup ({storage_type}):*',
-            f'`{type(e).__name__}: {e}`',
+            f'`{e.stderr.strip() or e.stdout.strip() or str(e)}`',
           ]
         )
       )
