@@ -19,8 +19,10 @@ def storage_decorator(func):
 
 
 @storage_decorator
-def upload_file_server(content, filename, folder, subfolder=None):
-  if subfolder:
+def upload_file_server(content, filename, folder, subfolder=None, ignore_dev=None):
+  if subfolder and not ignore_dev:
+    key = get_local_key(f'{subfolder}/{filename}')
+  elif subfolder:
     key = f'{subfolder}/{filename}'
   else:
     key = get_local_key(filename)

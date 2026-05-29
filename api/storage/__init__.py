@@ -10,13 +10,13 @@ from .local import upload_file_local, delete_file_local, list_files_local, folde
 from .server import list_files_server, delete_file_server, upload_file_server, folder_backup_server
 
 
-def upload_file(content, filename, folder, storage_type, subfolder=None):
+def upload_file(content, filename, folder, storage_type, subfolder=None, ignore_dev=None):
   if storage_type == 's3':
     return upload_file_to_s3(content, filename, folder, subfolder)
   elif storage_type == 'local':
-    return upload_file_local(content, filename, folder, subfolder)
+    return upload_file_local(content, filename, folder, subfolder, ignore_dev)
   elif storage_type == 'server':
-    return upload_file_server(content, filename, folder, subfolder)
+    return upload_file_server(content, filename, folder, subfolder, ignore_dev)
 
 
 def delete_file(filename, folder, storage_type, subfolder=None):

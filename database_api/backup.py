@@ -45,7 +45,7 @@ def db_backup(db_url: str, storage_type):
 
       filename = data_export(db_url)
       with open(filename, 'rb') as content:
-        upload_file(content, filename, BACKUP_FOLDER, storage_type, 'postgres-backup')
+        upload_file(content, filename, BACKUP_FOLDER, storage_type, 'postgres-backup', True)
       delete_file(filename, '', 'local')
 
       backups = get_all_filenames(BACKUP_FOLDER, storage_type, 'postgres-backup')

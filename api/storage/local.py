@@ -5,8 +5,10 @@ from .utils import get_local_key, set_backup_env
 from ..settings import BACKUP_FOLDER, SERVER_NAME
 
 
-def upload_file_local(content, filename, folder, subfolder=None):
-  if subfolder:
+def upload_file_local(content, filename, folder, subfolder=None, ignore_dev=None):
+  if subfolder and not ignore_dev:
+    key = get_local_key(f'{subfolder}/{filename}')
+  elif subfolder:
     key = f'{subfolder}/{filename}'
   else:
     key = get_local_key(filename)
