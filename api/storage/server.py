@@ -24,7 +24,7 @@ def upload_file_server(content, filename, folder, subfolder=None, ignore_dev=Non
     key = get_local_key('')
 
   if subfolder:
-    key = os.path.join(key, subfolder)
+    key = subfolder
 
   remote_path = os.path.join(folder, key, filename)
   subprocess.run(
@@ -92,7 +92,7 @@ def list_files_server(folder, subfolder=None, ignore_dev=False):
     key = get_local_key('')
 
   if subfolder:
-    key = os.path.join(key, subfolder)
+    key = subfolder
 
   path = os.path.join(folder, key)
   return [
