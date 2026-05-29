@@ -3,6 +3,7 @@ import sys
 import threading
 import subprocess
 from datetime import datetime
+from urllib.parse import urlparse
 
 from api.telegram import send_telegram_message
 from api.settings import POSTGRES_BACKUP_DAYS, BACKUP_FOLDER
@@ -17,18 +18,30 @@ def data_export(db_url: str):
   return filename
 
 
+def reset_database(db_url: str):
+  db_name = urlparse(db_url).path.lstrip('/')
+  
+  subprocess.run(['psql', db_url, '-c', f'DROP DATABASE IF EXISTS {db_name};'], check=True)
+  subprocess.run(['psql', db_url, '-c', f'CREATE DATABASE {db_name};'], check=True)
+
+
 def data_import(db_url: str, filename: str):
   if not os.path.exists(filename):
     print(f'File non trovato: {filename}')  # noqa: T201
     sys.exit(1)
+
+  answer = input('Verrà cancellato COMPLETAMENTE il database. Continuare? (y/N): ').strip().lower()
+  if answer != 'y':
+    print('Operazione annullata.')
+    sys.exit(0)
+
+  reset_database(db_url)
 
   subprocess.run(
     [
       'pg_restore',
       f'--dbname={db_url}',
       '--verbose',
-      '--clean',
-      '--if-exists',
       '--no-privileges',
       '--no-owner',
       filename,
