@@ -1,8 +1,8 @@
 import os
-import sys
 import threading
 import subprocess
 from datetime import datetime
+from urllib.parse import urlparse
 
 from api.telegram import send_telegram_message
 from api.settings import POSTGRES_BACKUP_DAYS, BACKUP_FOLDER, POSTGRES_DOCKER_CONTAINER
@@ -10,7 +10,7 @@ from api.storage import upload_file, get_all_filenames, delete_file
 
 
 PG_DUMP_FLAGS = ['--blobs', '--clean', '-Fc', '--verbose']
-PG_RESTORE_FLAGS = ['--verbose', '--clean', '--if-exists', '--no-privileges', '--no-owner']
+PG_RESTORE_FLAGS = ['--verbose', '--clean', '--no-privileges', '--no-owner']
 
 
 def data_export(db_url: str):
@@ -26,8 +26,29 @@ def data_export(db_url: str):
 
 def data_import(db_url: str, filename: str):
   if not os.path.exists(filename):
-    print(f'File non trovato: {filename}')  # noqa: T201
-    sys.exit(1)
+    raise FileNotFoundError(f'File non trovato: {filename}')
+
+  db_name = urlparse(db_url).path.lstrip('/')
+  admin_url = db_url.replace(f'/{db_name}', '/postgres')
+
+  if (
+    input(
+      f'Vuoi sovrascrivere il database "{db_name}" '
+      'questa operazione comporterà la cancellazione di tutti i dati) ? y/N: '
+    )
+    .strip()
+    .lower()
+  ) != 'y':
+    raise RuntimeError('Operazione annullata dall’utente')
+
+  subprocess.run(
+    ['psql', admin_url, '-c', f'DROP DATABASE IF EXISTS "{db_name}";'],
+    check=True,
+  )
+  subprocess.run(
+    ['psql', admin_url, '-c', f'CREATE DATABASE "{db_name}";'],
+    check=True,
+  )
 
   if POSTGRES_DOCKER_CONTAINER:
     _docker_pg_restore(db_url, filename)
