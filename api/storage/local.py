@@ -47,7 +47,7 @@ def folder_backup_local(folder_to_backup):
     [
       'restic',
       '-r',
-      os.path.join(BACKUP_FOLDER, 'prod', 'folder-backup'),
+      os.path.join(BACKUP_FOLDER, 'folder-backup'),
       'backup',
       folder_to_backup,
       '--host',

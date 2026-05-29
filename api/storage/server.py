@@ -120,7 +120,7 @@ def folder_backup_server(folder_to_backup):
     [
       'restic',
       '-r',
-      f'sftp:{BACKUP_SSH_CONFIG}:{os.path.join(BACKUP_FOLDER, "prod", "folder-backup")}',
+      f'sftp:{BACKUP_SSH_CONFIG}:{os.path.join(BACKUP_FOLDER, "folder-backup")}',
       'backup',
       folder_to_backup,
       '--host',
