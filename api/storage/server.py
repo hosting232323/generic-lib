@@ -127,3 +127,28 @@ def folder_backup_server(folder_to_backup):
     capture_output=True,
     text=True,
   )
+
+
+@storage_decorator
+def cleanup_folder_backups_server():
+  subprocess.run(
+    [
+      'restic',
+      '-r',
+      f'sftp:{BACKUP_SSH_CONFIG}:{os.path.join(BACKUP_FOLDER, "folder-backup")}',
+      'forget',
+      '--keep-hourly',
+      '48',
+      '--keep-daily',
+      '30',
+      '--keep-weekly',
+      '12',
+      '--keep-monthly',
+      '24',
+      '--prune',
+    ],
+    env=set_backup_env(),
+    check=True,
+    capture_output=True,
+    text=True,
+  )
