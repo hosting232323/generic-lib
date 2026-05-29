@@ -31,12 +31,13 @@ def delete_file_local(filename, folder, subfolder=None):
 
 
 def list_files_local(folder, subfolder=None, ignore_dev=False):
-  base = '' if ignore_dev else get_local_key('')
-
-  path = os.path.join(folder, base)
+  if not ignore_dev:
+    key = get_local_key('')
+  
   if subfolder:
-    path = os.path.join(path, subfolder)
-
+    key = os.path.join(key, subfolder)
+    
+  path = os.path.join(folder, key)
   return [os.path.join(subfolder or '', f) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
 
 
