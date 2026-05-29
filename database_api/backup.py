@@ -48,7 +48,7 @@ def db_backup(db_url: str, storage_type):
         upload_file(content, filename, BACKUP_FOLDER, storage_type, 'postgres-backup', True)
       delete_file(filename, '', 'local')
 
-      backups = get_all_filenames(BACKUP_FOLDER, storage_type, 'postgres-backup')
+      backups = get_all_filenames(BACKUP_FOLDER, storage_type, 'postgres-backup', True)
       dump_files = [f for f in backups if f.lower().endswith('.dump')]
       dump_files.sort()
       if len(dump_files) > POSTGRES_BACKUP_DAYS:
