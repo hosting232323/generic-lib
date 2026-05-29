@@ -6,11 +6,13 @@ from ..settings import BACKUP_FOLDER, SERVER_NAME
 
 
 def upload_file_local(content, filename, folder, subfolder=None, ignore_dev=None):
-  key = filename if ignore_dev else get_local_key(filename)
+  if not ignore_dev:
+    key = get_local_key('')
+    
   if subfolder:
-    key = os.path.join(subfolder, key)
-
-  full_path = os.path.join(folder, key)
+    key = os.path.join(key, subfolder)
+    
+  full_path = os.path.join(folder, key, filename)
   os.makedirs(os.path.dirname(full_path), exist_ok=True)
 
   with open(full_path, 'wb') as file:
