@@ -20,16 +20,11 @@ def storage_decorator(func):
 
 @storage_decorator
 def upload_file_server(content, filename, folder, subfolder=None, ignore_dev=None):
-  if ignore_dev:
-    key = filename
-  else:
-    key = get_local_key(filename)
-
+  key = filename if ignore_dev else get_local_key(filename)
   if subfolder:
-    key = f'{subfolder}/{key}'
+    key = os.path.join(subfolder, key)
 
   remote_path = os.path.join(folder, key)
-
   subprocess.run(
     [
       'ssh',
