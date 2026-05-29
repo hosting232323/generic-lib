@@ -32,19 +32,27 @@ def delete_file_local(filename, folder, subfolder=None):
   os.remove(os.path.join(key, filename))
 
 
-def list_files_local(folder, subfolder=None):
-  if subfolder:
-    key = subfolder
-  else:
-    key = f'{folder}/{get_local_key("")}'
+def list_files_local(folder, subfolder=None, ignore_dev=False):
+  base = '' if ignore_dev else get_local_key('')
 
-  full_path = os.path.join(folder, key)
-  return [os.path.join(key, file) for file in os.listdir(full_path) if os.path.isfile(os.path.join(full_path, file))]
+  path = os.path.join(folder, base)
+  if subfolder:
+    path = os.path.join(path, subfolder)
+
+  return [os.path.join(subfolder or '', f) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
 
 
 def folder_backup_local(folder_to_backup):
   subprocess.run(
-    ['restic', '-r', os.path.join(BACKUP_FOLDER, 'folder-backup'), 'backup', folder_to_backup, '--host', SERVER_NAME],
+    [
+      'restic',
+      '-r',
+      os.path.join(BACKUP_FOLDER, 'prod', 'folder-backup'),
+      'backup',
+      folder_to_backup,
+      '--host',
+      SERVER_NAME,
+    ],
     env=set_backup_env(),
     check=True,
     capture_output=True,

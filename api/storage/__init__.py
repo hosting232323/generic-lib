@@ -28,13 +28,13 @@ def delete_file(filename, folder, storage_type, subfolder=None):
     return delete_file_server(filename, folder, subfolder)
 
 
-def get_all_filenames(folder, storage_type, subfolder=None):
+def get_all_filenames(folder, storage_type, subfolder=None, ignore_dev=None):
   if storage_type == 's3':
     return list_files_in_s3(folder, subfolder)
   elif storage_type == 'local':
-    return list_files_local(folder, subfolder)
+    return list_files_local(folder, subfolder, ignore_dev)
   elif storage_type == 'server':
-    return list_files_server(folder, subfolder)
+    return list_files_server(folder, subfolder, ignore_dev)
 
 
 def folder_backup(folder_to_backup, storage_type):

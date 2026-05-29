@@ -90,19 +90,20 @@ def delete_file_server(filename, folder, subfolder=None):
 
 
 @storage_decorator
-def list_files_server(folder, subfolder=None):
+def list_files_server(folder, subfolder=None, ignore_dev=False):
+  base = '' if ignore_dev else get_local_key('')
+
+  path = os.path.join(folder, base)
   if subfolder:
-    key = subfolder
-  else:
-    key = f'{folder}/{get_local_key("")}'
+    path = os.path.join(path, subfolder)
 
   return [
-    os.path.join(key, file)
+    os.path.join(subfolder or '', file)
     for file in subprocess.run(
       [
         'ssh',
         f'{BACKUP_SSH_CONFIG}',
-        f'find "{os.path.join(folder, key)}" -maxdepth 1 -type f -printf "%f\\n"',
+        f'find "{path}" -maxdepth 1 -type f -printf "%f\\n"',
       ],
       capture_output=True,
       text=True,
@@ -119,7 +120,7 @@ def folder_backup_server(folder_to_backup):
     [
       'restic',
       '-r',
-      f'sftp:{BACKUP_SSH_CONFIG}:{os.path.join(BACKUP_FOLDER, "folder-backup")}',
+      f'sftp:{BACKUP_SSH_CONFIG}:{os.path.join(BACKUP_FOLDER, "prod", "folder-backup")}',
       'backup',
       folder_to_backup,
       '--host',
