@@ -42,3 +42,27 @@ def folder_backup_local(folder_to_backup):
     capture_output=True,
     text=True,
   )
+
+
+def cleanup_folder_backups_local():
+  subprocess.run(
+    [
+      'restic',
+      '-r',
+      os.path.join(BACKUP_FOLDER, 'folder-backup'),
+      'forget',
+      '--keep-hourly',
+      '48',
+      '--keep-daily',
+      '30',
+      '--keep-weekly',
+      '12',
+      '--keep-monthly',
+      '24',
+      '--prune',
+    ],
+    env=set_backup_env(),
+    check=True,
+    capture_output=True,
+    text=True,
+  )
