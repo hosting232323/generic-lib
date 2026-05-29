@@ -20,11 +20,13 @@ def storage_decorator(func):
 
 @storage_decorator
 def upload_file_server(content, filename, folder, subfolder=None, ignore_dev=None):
-  key = filename if ignore_dev else get_local_key(filename)
-  if subfolder:
-    key = os.path.join(subfolder, key)
+  if not ignore_dev:
+    key = get_local_key('')
 
-  remote_path = os.path.join(folder, key)
+  if subfolder:
+    key = os.path.join(key, subfolder)
+
+  remote_path = os.path.join(folder, key, filename)
   subprocess.run(
     [
       'ssh',
@@ -86,12 +88,13 @@ def delete_file_server(filename, folder, subfolder=None):
 
 @storage_decorator
 def list_files_server(folder, subfolder=None, ignore_dev=False):
-  base = '' if ignore_dev else get_local_key('')
+  if not ignore_dev:
+    key = get_local_key('')
 
-  path = os.path.join(folder, base)
   if subfolder:
-    path = os.path.join(path, subfolder)
+    key = os.path.join(key, subfolder)
 
+  path = os.path.join(folder, key)
   return [
     os.path.join(subfolder or '', file)
     for file in subprocess.run(

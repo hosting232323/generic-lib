@@ -8,10 +8,10 @@ from ..settings import BACKUP_FOLDER, SERVER_NAME
 def upload_file_local(content, filename, folder, subfolder=None, ignore_dev=None):
   if not ignore_dev:
     key = get_local_key('')
-    
+
   if subfolder:
     key = os.path.join(key, subfolder)
-    
+
   full_path = os.path.join(folder, key, filename)
   os.makedirs(os.path.dirname(full_path), exist_ok=True)
 
@@ -33,10 +33,10 @@ def delete_file_local(filename, folder, subfolder=None):
 def list_files_local(folder, subfolder=None, ignore_dev=False):
   if not ignore_dev:
     key = get_local_key('')
-  
+
   if subfolder:
     key = os.path.join(key, subfolder)
-    
+
   path = os.path.join(folder, key)
   return [os.path.join(subfolder or '', f) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
 
