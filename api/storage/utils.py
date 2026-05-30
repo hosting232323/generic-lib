@@ -3,7 +3,7 @@ import os
 from ..settings import IS_DEV, RESTIC_PASSWORD, BACKUP_FOLDER, SERVER_NAME
 
 
-def get_full_path(folder, ignore_dev, subfolder, filename = None):
+def get_full_path(folder, subfolder, ignore_dev, filename=None):
   if not ignore_dev:
     folder = os.path.join(folder, 'test' if IS_DEV else 'prod')
 

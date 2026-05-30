@@ -6,7 +6,7 @@ from ..settings import BACKUP_FOLDER, SERVER_NAME
 
 
 def upload_file_local(content, filename, folder, subfolder=None, ignore_dev=None):
-  full_path = get_full_path(folder, ignore_dev, subfolder, filename)
+  full_path = get_full_path(folder, subfolder, ignore_dev, filename)
   os.makedirs(os.path.dirname(full_path), exist_ok=True)
 
   with open(full_path, 'wb') as file:
@@ -15,16 +15,14 @@ def upload_file_local(content, filename, folder, subfolder=None, ignore_dev=None
 
 
 def delete_file_local(filename, folder, subfolder=None, ignore_dev=None):
-  full_path = get_full_path(folder, ignore_dev, subfolder, filename)
+  full_path = get_full_path(folder, subfolder, ignore_dev, filename)
   os.remove(full_path)
 
 
 def list_files_local(folder, subfolder=None, ignore_dev=False):
-  full_path = get_full_path(folder, ignore_dev, subfolder)
+  full_path = get_full_path(folder, subfolder, ignore_dev)
   return [
-    os.path.join(full_path, file)
-    for file in os.listdir(full_path)
-    if os.path.isfile(os.path.join(full_path, file))
+    os.path.join(full_path, file) for file in os.listdir(full_path) if os.path.isfile(os.path.join(full_path, file))
   ]
 
 
