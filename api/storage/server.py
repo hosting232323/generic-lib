@@ -3,7 +3,7 @@ import shutil
 import tempfile
 import subprocess
 
-from .utils import get_local_key, set_backup_env
+from .utils import get_full_path, set_backup_env
 from ..settings import BACKUP_SSH_CONFIG, BACKUP_FOLDER, SERVER_NAME
 
 
@@ -21,7 +21,7 @@ def storage_decorator(func):
 @storage_decorator
 def upload_file_server(content, filename, folder, subfolder=None, ignore_dev=None):
   if not ignore_dev:
-    key = get_local_key('')
+    key = get_full_path()
 
   if subfolder:
     key = subfolder
@@ -70,7 +70,7 @@ def delete_file_server(filename, folder, subfolder=None):
   if subfolder:
     key = os.path.join(folder, subfolder)
   elif folder:
-    key = os.path.join(folder, get_local_key(''))
+    key = os.path.join(folder, get_full_path())
   else:
     key = folder
 
@@ -89,7 +89,7 @@ def delete_file_server(filename, folder, subfolder=None):
 @storage_decorator
 def list_files_server(folder, subfolder=None, ignore_dev=False):
   if not ignore_dev:
-    key = get_local_key('')
+    key = get_full_path()
 
   if subfolder:
     key = subfolder

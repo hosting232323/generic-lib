@@ -3,13 +3,14 @@ import os
 from ..settings import IS_DEV, RESTIC_PASSWORD, BACKUP_FOLDER, SERVER_NAME
 
 
-def get_local_key(key):
-  if IS_DEV is None:
-    return key
-  elif IS_DEV:
-    return f'test/{key}'
-  else:
-    return f'prod/{key}'
+def get_full_path(folder, ignore_dev, subfolder, filename = None):
+  if not ignore_dev:
+    folder = os.path.join(folder, 'test' if IS_DEV else 'prod')
+
+  if subfolder:
+    folder = os.path.join(folder, subfolder)
+
+  return os.path.join(folder, filename) if filename else folder
 
 
 def format_mismatch_message(first_list: list, second_list: list, success_text: str, failure_text: str):
