@@ -10,31 +10,31 @@ from .local import upload_file_local, delete_file_local, list_files_local, folde
 from .server import list_files_server, delete_file_server, upload_file_server, folder_backup_server
 
 
-def upload_file(content, filename, folder, storage_type, subfolder=None):
+def upload_file(content, filename, folder, storage_type, subfolder=None, ignore_dev=None):
   if storage_type == 's3':
     return upload_file_to_s3(content, filename, folder, subfolder)
   elif storage_type == 'local':
-    return upload_file_local(content, filename, folder, subfolder)
+    return upload_file_local(content, filename, folder, subfolder, ignore_dev)
   elif storage_type == 'server':
-    return upload_file_server(content, filename, folder, subfolder)
+    return upload_file_server(content, filename, folder, subfolder, ignore_dev)
 
 
-def delete_file(filename, folder, storage_type, subfolder=None):
+def delete_file(filename, folder, storage_type, subfolder=None, ignore_dev=None):
   if storage_type == 's3':
     delete_file_from_s3(filename, folder, subfolder)
   elif storage_type == 'local':
-    delete_file_local(filename, folder, subfolder)
+    delete_file_local(filename, folder, subfolder, ignore_dev)
   elif storage_type == 'server':
-    return delete_file_server(filename, folder, subfolder)
+    return delete_file_server(filename, folder, subfolder, ignore_dev)
 
 
-def get_all_filenames(folder, storage_type, subfolder=None):
+def get_all_filenames(folder, storage_type, subfolder=None, ignore_dev=None):
   if storage_type == 's3':
     return list_files_in_s3(folder, subfolder)
   elif storage_type == 'local':
-    return list_files_local(folder, subfolder)
+    return list_files_local(folder, subfolder, ignore_dev)
   elif storage_type == 'server':
-    return list_files_server(folder, subfolder)
+    return list_files_server(folder, subfolder, ignore_dev)
 
 
 def folder_backup(folder_to_backup, storage_type):
