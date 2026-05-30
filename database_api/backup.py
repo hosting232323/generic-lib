@@ -45,10 +45,10 @@ def db_backup(db_url: str, storage_type):
 
       filename = data_export(db_url)
       with open(filename, 'rb') as content:
-        upload_file(content, filename, BACKUP_FOLDER, storage_type, 'postgres-backup')
-      delete_file(filename, '', 'local')
+        upload_file(content, filename, BACKUP_FOLDER, storage_type, 'postgres-backup', True)
+      delete_file(filename, '', 'local', ignore_dev=True)
 
-      backups = get_all_filenames(BACKUP_FOLDER, storage_type, 'postgres-backup')
+      backups = get_all_filenames(BACKUP_FOLDER, storage_type, 'postgres-backup', True)
       dump_files = [f for f in backups if f.lower().endswith('.dump')]
       dump_files.sort()
       if len(dump_files) > POSTGRES_BACKUP_DAYS:
@@ -57,7 +57,7 @@ def db_backup(db_url: str, storage_type):
           filename = os.path.basename(file_to_delete)
           subfolder_path = os.path.dirname(file_to_delete) or None
 
-          delete_file(filename, BACKUP_FOLDER, storage_type, subfolder_path)
+          delete_file(filename, BACKUP_FOLDER, storage_type, subfolder_path, True)
 
     except subprocess.CalledProcessError as e:
       send_telegram_message(

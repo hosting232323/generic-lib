@@ -3,7 +3,7 @@ import shutil
 import tempfile
 import subprocess
 
-from .utils import get_local_key, set_backup_env
+from .utils import get_full_path, set_backup_env
 from ..settings import BACKUP_SSH_CONFIG, BACKUP_FOLDER, SERVER_NAME
 
 
@@ -19,19 +19,13 @@ def storage_decorator(func):
 
 
 @storage_decorator
-def upload_file_server(content, filename, folder, subfolder=None):
-  if subfolder:
-    key = f'{subfolder}/{filename}'
-  else:
-    key = get_local_key(filename)
-
-  remote_path = os.path.join(folder, key)
-
+def upload_file_server(content, filename, folder, subfolder=None, ignore_dev=None):
+  full_path = get_full_path(folder, subfolder, ignore_dev, filename)
   subprocess.run(
     [
       'ssh',
       f'{BACKUP_SSH_CONFIG}',
-      f'mkdir -p "{os.path.dirname(remote_path)}"',
+      f'mkdir -p "{os.path.dirname(full_path)}"',
     ],
     check=True,
     capture_output=True,
@@ -51,7 +45,7 @@ def upload_file_server(content, filename, folder, subfolder=None):
         '--partial',
         '--append-verify',
         tmp_path,
-        f'{BACKUP_SSH_CONFIG}:{remote_path}',
+        f'{BACKUP_SSH_CONFIG}:{full_path}',
       ],
       check=True,
       capture_output=True,
@@ -62,23 +56,17 @@ def upload_file_server(content, filename, folder, subfolder=None):
     if tmp_path and os.path.exists(tmp_path):
       os.remove(tmp_path)
 
-  return remote_path
+  return full_path
 
 
 @storage_decorator
-def delete_file_server(filename, folder, subfolder=None):
-  if subfolder:
-    key = os.path.join(folder, subfolder)
-  elif folder:
-    key = os.path.join(folder, get_local_key(''))
-  else:
-    key = folder
-
+def delete_file_server(filename, folder, subfolder=None, ignore_dev=False):
+  full_path = get_full_path(folder, subfolder, ignore_dev, filename)
   subprocess.run(
     [
       'ssh',
       f'{BACKUP_SSH_CONFIG}',
-      f'rm "{os.path.join(key, filename)}"',
+      f'rm "{full_path}"',
     ],
     check=True,
     capture_output=True,
@@ -87,19 +75,15 @@ def delete_file_server(filename, folder, subfolder=None):
 
 
 @storage_decorator
-def list_files_server(folder, subfolder=None):
-  if subfolder:
-    key = subfolder
-  else:
-    key = f'{folder}/{get_local_key("")}'
-
+def list_files_server(folder, subfolder=None, ignore_dev=False):
+  full_path = get_full_path(folder, subfolder, ignore_dev)
   return [
-    os.path.join(key, file)
+    os.path.join(full_path, file)
     for file in subprocess.run(
       [
         'ssh',
         f'{BACKUP_SSH_CONFIG}',
-        f'find "{os.path.join(folder, key)}" -maxdepth 1 -type f -printf "%f\\n"',
+        f'find "{full_path}" -maxdepth 1 -type f -printf "%f\\n"',
       ],
       capture_output=True,
       text=True,
