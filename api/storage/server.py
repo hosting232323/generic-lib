@@ -4,7 +4,7 @@ import tempfile
 import subprocess
 
 from .utils import get_full_path, set_backup_env
-from ..settings import BACKUP_SSH_CONFIG, BACKUP_FOLDER, SERVER_NAME
+from ..settings import BACKUP_SSH_CONFIG, BACKUP_FOLDER, SERVER_NAME, BACKUP_DAYS
 
 
 def storage_decorator(func):
@@ -121,14 +121,8 @@ def cleanup_folder_backups_server():
       '-r',
       f'sftp:{BACKUP_SSH_CONFIG}:{os.path.join(BACKUP_FOLDER, "folder-backup")}',
       'forget',
-      '--keep-hourly',
-      '48',
       '--keep-daily',
-      '30',
-      '--keep-weekly',
-      '12',
-      '--keep-monthly',
-      '24',
+      str(BACKUP_DAYS),
       '--prune',
     ],
     env=set_backup_env(),

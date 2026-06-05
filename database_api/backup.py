@@ -1,11 +1,12 @@
 import os
 import sys
+import time
 import threading
 import subprocess
 from datetime import datetime
 
 from api.telegram import send_telegram_message
-from api.settings import POSTGRES_BACKUP_DAYS, BACKUP_FOLDER
+from api.settings import BACKUP_DAYS, BACKUP_FOLDER
 from api.storage import upload_file, get_all_filenames, delete_file
 
 
@@ -50,12 +51,15 @@ def db_backup(db_url: str, storage_type):
 
       backups = get_all_filenames(BACKUP_FOLDER, storage_type, 'postgres-backup', True)
       dump_files = [f for f in backups if f.lower().endswith('.dump')]
-      dump_files.sort()
-      if len(dump_files) > POSTGRES_BACKUP_DAYS:
-        files_to_delete = dump_files[: len(dump_files) - POSTGRES_BACKUP_DAYS]
-        for file_to_delete in files_to_delete:
-          filename = os.path.basename(file_to_delete)
-          subfolder_path = os.path.dirname(file_to_delete) or None
+
+      now = time.time()
+      retention_seconds = BACKUP_DAYS * 86400
+
+      for file_path in dump_files:
+        file_time = os.path.getmtime(file_path)
+        if now - file_time > retention_seconds:
+          filename = os.path.basename(file_path)
+          subfolder_path = os.path.dirname(file_path) or None
 
           delete_file(filename, BACKUP_FOLDER, storage_type, subfolder_path, True)
 
