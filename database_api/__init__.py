@@ -1,5 +1,6 @@
 import enum
 import traceback
+from zoneinfo import ZoneInfo
 from contextlib import contextmanager
 from datetime import datetime, date, time
 from sqlalchemy.orm import sessionmaker, declarative_base
@@ -50,7 +51,7 @@ class BaseEntity(Base):
         if isinstance(getattr(self, attribute), enum.Enum):
           dict_obj[attribute] = getattr(self, attribute).value
         elif type(getattr(self, attribute)) is datetime:
-          dict_obj[attribute] = getattr(self, attribute).strftime('%d/%m/%Y %H:%M')
+          dict_obj[attribute] = getattr(self, attribute).astimezone(ZoneInfo('Europe/Rome')).strftime('%d/%m/%Y %H:%M')
         elif type(getattr(self, attribute)) is date:
           dict_obj[attribute] = getattr(self, attribute).strftime('%Y-%m-%d')
         elif type(getattr(self, attribute)) is time:
