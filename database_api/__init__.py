@@ -51,7 +51,7 @@ class BaseEntity(Base):
         if isinstance(getattr(self, attribute), enum.Enum):
           dict_obj[attribute] = getattr(self, attribute).value
         elif type(getattr(self, attribute)) is datetime:
-          local_dt = getattr(self, attribute).astimezone(ZoneInfo("Europe/Rome"))
+          local_dt = getattr(self, attribute).astimezone(ZoneInfo('Europe/Rome'))
           dict_obj[attribute] = local_dt.strftime('%d/%m/%Y %H:%M')
         elif type(getattr(self, attribute)) is date:
           dict_obj[attribute] = getattr(self, attribute).strftime('%Y-%m-%d')
