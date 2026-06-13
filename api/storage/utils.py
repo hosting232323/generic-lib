@@ -1,6 +1,10 @@
 import os
+from sqlalchemy import text
+from flask import request, send_from_directory
+from sqlalchemy.orm import Session as session_type
 
-from ..settings import IS_DEV, RESTIC_PASSWORD, BACKUP_FOLDER, SERVER_NAME
+from database_api.operations import db_session_decorator
+from ..settings import IS_DEV, RESTIC_PASSWORD, BACKUP_FOLDER, SERVER_NAME, API_PREFIX, STATIC_FOLDER
 
 
 def get_full_path(folder, subfolder, ignore_dev, filename=None):
@@ -35,3 +39,34 @@ def set_backup_env():
   env = os.environ.copy()
   env['RESTIC_PASSWORD'] = RESTIC_PASSWORD
   return env
+
+
+@db_session_decorator(commit=True)
+def guess_next_id(model: str, session: session_type = None) -> int:
+  return session.execute(text(f"SELECT nextval('{model}_id_seq')")).scalar()
+
+
+def guess_extension(mime_type: str) -> str:
+  if mime_type == 'image/jpeg':
+    return '.jpg'
+  if mime_type == 'image/png':
+    return '.png'
+  if mime_type == 'image/webp':
+    return '.webp'
+  if mime_type == 'video/mp4':
+    return '.mp4'
+  if mime_type == 'application/pdf':
+    return '.pdf'
+
+  raise ValueError('Mime type non supportato')
+
+
+def get_base_file_path(path):
+  return f'http{"s" if not IS_DEV else ""}://{request.host}{f"/{API_PREFIX}" if API_PREFIX else ""}/{path}/'
+
+
+def serve_file(filename: str, folder: str):
+  return send_from_directory(
+    os.path.join(STATIC_FOLDER, 'test' if IS_DEV else 'prod', folder),
+    filename,
+  )
