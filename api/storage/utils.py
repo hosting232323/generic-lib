@@ -1,4 +1,6 @@
 import os
+from sqlalchemy import text
+from database_api import Session
 
 from ..settings import IS_DEV, RESTIC_PASSWORD, BACKUP_FOLDER, SERVER_NAME
 
@@ -36,3 +38,23 @@ def set_backup_env():
   env = os.environ.copy()
   env['RESTIC_PASSWORD'] = RESTIC_PASSWORD
   return env
+
+
+def guess_next_id(model: str) -> int:
+  with Session() as session:
+    return session.execute(text(f"SELECT nextval('{model}_id_seq')")).scalar()
+
+
+def guess_extension(mime_type: str) -> str:
+  if mime_type == 'image/jpeg':
+    return '.jpg'
+  if mime_type == 'image/png':
+    return '.png'
+  if mime_type == 'image/webp':
+    return '.webp'
+  if mime_type == 'video/mp4':
+    return '.mp4'
+  if mime_type == 'application/pdf':
+    return '.pdf'
+
+  raise ValueError('Mime type non supportato')
