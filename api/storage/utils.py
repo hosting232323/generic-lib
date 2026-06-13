@@ -1,7 +1,8 @@
 import os
 from sqlalchemy import text
-from database_api import Session
+from sqlalchemy.orm import Session as session_type
 
+from database_api.operations import db_session_decorator
 from ..settings import IS_DEV, RESTIC_PASSWORD, BACKUP_FOLDER, SERVER_NAME
 
 
@@ -40,9 +41,9 @@ def set_backup_env():
   return env
 
 
-def guess_next_id(model: str) -> int:
-  with Session() as session:
-    return session.execute(text(f"SELECT nextval('{model}_id_seq')")).scalar()
+@db_session_decorator(commit=True)
+def guess_next_id(model: str, session: session_type = None) -> int:
+  return session.execute(text(f"SELECT nextval('{model}_id_seq')")).scalar()
 
 
 def guess_extension(mime_type: str) -> str:
