@@ -35,7 +35,7 @@ def data_import(db_url: str, filename: str):
     _local_pg_restore(db_url, filename)
 
 
-def db_backup(db_url: str, storage_type):
+def db_backup(db_url: str, server=None):
   def run():
     try:
       if not BACKUP_FOLDER:
@@ -43,10 +43,10 @@ def db_backup(db_url: str, storage_type):
 
       filename = data_export(db_url)
       with open(filename, 'rb') as content:
-        upload_file(content, filename, BACKUP_FOLDER, storage_type, 'postgres-backup', True)
-      delete_file(filename, '', 'local', ignore_dev=True)
+        upload_file(content, filename, BACKUP_FOLDER, server, 'postgres-backup', True)
+      delete_file(filename, '', ignore_dev=True)
 
-      backups = get_all_filenames(BACKUP_FOLDER, storage_type, 'postgres-backup', True)
+      backups = get_all_filenames(BACKUP_FOLDER, server, 'postgres-backup', True)
       dump_files = [f for f in backups if f.lower().endswith('.dump')]
       dump_files.sort()
       if len(dump_files) > POSTGRES_BACKUP_DAYS:
@@ -55,14 +55,14 @@ def db_backup(db_url: str, storage_type):
           filename = os.path.basename(file_to_delete)
           subfolder_path = os.path.dirname(file_to_delete) or None
 
-          delete_file(filename, BACKUP_FOLDER, storage_type, subfolder_path, True)
+          delete_file(filename, BACKUP_FOLDER, server, subfolder_path, True)
 
     except subprocess.CalledProcessError as e:
       send_telegram_message(
         '\n'.join(
           [
             f'*📦 DB Backup Fallito*\n▶️ `{db_url}`\n',
-            f'*❌ Errore durante il backup ({storage_type}):*',
+            f'*❌ Errore durante il backup ({"server" if server else "local"}):*',
             f'`{e.stderr.strip() or e.stdout.strip() or str(e)}`',
           ]
         )

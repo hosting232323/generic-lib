@@ -1,9 +1,10 @@
 import os
+from flask import request
 from sqlalchemy import text
 from sqlalchemy.orm import Session as session_type
 
 from database_api.operations import db_session_decorator
-from ..settings import IS_DEV, RESTIC_PASSWORD, BACKUP_FOLDER, SERVER_NAME
+from ..settings import IS_DEV, RESTIC_PASSWORD, BACKUP_FOLDER, SERVER_NAME, API_PREFIX
 
 
 def get_full_path(folder, subfolder, ignore_dev, filename=None):
@@ -59,3 +60,7 @@ def guess_extension(mime_type: str) -> str:
     return '.pdf'
 
   raise ValueError('Mime type non supportato')
+
+
+def get_base_file_path(path):
+  return f'http{"s" if not IS_DEV else ""}://{request.host}{f"/{API_PREFIX}" if API_PREFIX else ""}/{path}/'
