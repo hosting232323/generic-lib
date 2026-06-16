@@ -2,41 +2,44 @@ import threading
 import subprocess
 from pathlib import Path
 
-from .utils import format_mismatch_message
+from .utils import format_mismatch_message, get_full_path
 from ..telegram import send_telegram_message
 
-from .local import upload_file_local, delete_file_local, list_files_local, folder_backup_local
-from .server import list_files_server, delete_file_server, upload_file_server, folder_backup_server
+from .local import _upload_file_local, _delete_file_local, _list_files_local, _folder_backup_local
+from .server import _upload_file_server, _delete_file_server, _list_files_server, _folder_backup_server
 
 
 def upload_file(content, filename, folder, server=None, subfolder=None, ignore_dev=None):
+  full_path = get_full_path(folder, subfolder, ignore_dev, filename)
   if not server:
-    return upload_file_local(content, filename, folder, subfolder, ignore_dev)
+    return _upload_file_local(content, full_path)
   else:
-    return upload_file_server(content, filename, folder, subfolder, ignore_dev)
+    return _upload_file_server(content, full_path)
 
 
 def delete_file(filename, folder, server=None, subfolder=None, ignore_dev=None):
+  full_path = get_full_path(folder, subfolder, ignore_dev, filename)
   if not server:
-    delete_file_local(filename, folder, subfolder, ignore_dev)
+    return _delete_file_local(full_path)
   else:
-    return delete_file_server(filename, folder, subfolder, ignore_dev)
+    return _delete_file_server(full_path)
 
 
 def get_all_filenames(folder, server=None, subfolder=None, ignore_dev=None):
+  full_path = get_full_path(folder, subfolder, ignore_dev)
   if not server:
-    return list_files_local(folder, subfolder, ignore_dev)
+    return _list_files_local(full_path)
   else:
-    return list_files_server(folder, subfolder, ignore_dev)
+    return _list_files_server(full_path)
 
 
 def folder_backup(folder_to_backup, server=None):
   def run():
     try:
       if not server:
-        folder_backup_local(folder_to_backup)
+        _folder_backup_local(folder_to_backup)
       else:
-        folder_backup_server(folder_to_backup)
+        _folder_backup_server(folder_to_backup)
     except subprocess.CalledProcessError as e:
       send_telegram_message(
         '\n'.join(
@@ -53,7 +56,7 @@ def folder_backup(folder_to_backup, server=None):
 
 
 def check_mismatch(db_files, folder, label, subfolder=None):
-  files = [Path(path).name for path in list_files_local(folder, subfolder)]
+  files = [Path(path).name for path in _list_files_local(folder, subfolder)]
   send_telegram_message(
     '\n'.join(
       [f'*📊 Report Check Mismatch*\n▶️ {label}\n']
