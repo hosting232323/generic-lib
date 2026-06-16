@@ -1,8 +1,8 @@
 import os
-import sys
 import threading
 import subprocess
 from datetime import datetime
+from urllib.parse import urlparse
 
 from api.telegram import send_telegram_message
 from api.settings import POSTGRES_BACKUP_DAYS, BACKUP_FOLDER, POSTGRES_DOCKER_CONTAINER
@@ -10,7 +10,7 @@ from api.storage import upload_file, get_all_filenames, delete_file
 
 
 PG_DUMP_FLAGS = ['--blobs', '--clean', '-Fc', '--verbose']
-PG_RESTORE_FLAGS = ['--verbose', '--clean', '--if-exists', '--no-privileges', '--no-owner']
+PG_RESTORE_FLAGS = ['--verbose', '--no-privileges', '--no-owner']
 
 
 def data_export(db_url: str):
@@ -26,13 +26,37 @@ def data_export(db_url: str):
 
 def data_import(db_url: str, filename: str):
   if not os.path.exists(filename):
-    print(f'File non trovato: {filename}')  # noqa: T201
-    sys.exit(1)
+    raise FileNotFoundError(f'File non trovato: {filename}')
 
-  if POSTGRES_DOCKER_CONTAINER:
-    _docker_pg_restore(db_url, filename)
-  else:
-    _local_pg_restore(db_url, filename)
+  parsed = urlparse(db_url)
+  db_name = parsed.path.lstrip('/')
+  admin_url = parsed._replace(path='/postgres').geturl()
+  if (
+    input(
+      f'Vuoi sovrascrivere il database "{db_name}"? '
+      'Questa operazione comporterà la cancellazione di tutti i dati. [y/N]: '
+    )
+    .strip()
+    .lower()
+  ) != 'y':
+    raise RuntimeError('Operazione annullata dall’utente')
+
+  try:
+    _recreate_database(admin_url, db_name)
+
+    if POSTGRES_DOCKER_CONTAINER:
+      _docker_pg_restore(db_url, filename)
+    else:
+      _local_pg_restore(db_url, filename)
+
+  except subprocess.CalledProcessError as e:
+    details = (e.stderr or e.stdout or '').strip()
+    raise RuntimeError(
+      f'Import del database "{db_name}" non riuscito.\n'
+      f'{details or f"Il comando è terminato con codice di uscita {e.returncode}."}\n'
+      'Assicurati che il servizio Postgres sia raggiungibile e che non ci siano '
+      'connessioni attive al database prima di ripetere l’operazione.'
+    ) from e
 
 
 def db_backup(db_url: str, storage_type):
@@ -70,6 +94,20 @@ def db_backup(db_url: str, storage_type):
 
   thread = threading.Thread(target=run, daemon=True)
   thread.start()
+
+
+def _recreate_database(admin_url: str, db_name: str):
+  _run_admin_sql(admin_url, f'DROP DATABASE IF EXISTS "{db_name}";')
+  _run_admin_sql(admin_url, f'CREATE DATABASE "{db_name}";')
+
+
+def _run_admin_sql(admin_url: str, sql: str):
+  command = ['psql', admin_url, '-v', 'ON_ERROR_STOP=1', '-c', sql]
+
+  if POSTGRES_DOCKER_CONTAINER:
+    command = ['docker', 'exec', POSTGRES_DOCKER_CONTAINER, *command]
+
+  subprocess.run(command, check=True, capture_output=True, text=True)
 
 
 def _docker_pg_dump(db_url: str, filename: str):
