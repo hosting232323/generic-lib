@@ -5,7 +5,6 @@ requests
 python-dotenv
 flask
 flask_cors
-schedule
 tqdm
 PyJWT
 boto3
@@ -13,3 +12,4 @@ google-auth
 stripe
 python-telegram-bot
 pytz
+tzdata
