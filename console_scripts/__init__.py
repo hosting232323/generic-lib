@@ -33,6 +33,6 @@ def create_files_and_folders(obj: dict, base_path: str):
       if os.path.exists(path):
         print(f'Already exists {path}')  # noqa: T201
       else:
-        with open(path, 'w') as file:
+        with open(path, 'w', encoding='utf-8') as file:
           file.write(obj[key])
           print(f'Generate file {path}')  # noqa: T201
