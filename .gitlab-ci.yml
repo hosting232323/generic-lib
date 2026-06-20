@@ -1,5 +1,5 @@
 stages:
-  - lint
+  - housekeeping
 
 include:
-  - local: 'gitlab/lint.yml'
+  - local: 'gitlab/housekeeping.yml'

@@ -1,3 +1,30 @@
+[project]
+name = "generic-lib"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+  "build",
+  "SQLAlchemy",
+  "alembic",
+  "requests",
+  "python-dotenv",
+  "flask",
+  "flask_cors",
+  "tqdm",
+  "PyJWT",
+  "boto3",
+  "google-auth",
+  "stripe",
+  "python-telegram-bot",
+  "pytz",
+  "tzdata",
+]
+
+[project.optional-dependencies]
+dev = [
+  "ruff",
+]
+
 [build-system]
 requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
