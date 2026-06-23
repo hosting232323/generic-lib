@@ -1,46 +1,40 @@
-import smtplib
-import traceback
-from email.utils import formataddr
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.mime.application import MIMEApplication
+import os
+import urllib.error
+import json as _json
+import urllib.request
 
-from .sender import EMAIL_SENDER
 from ..telegram import send_telegram_message
 
 
-def send_email(receiver_email: str, body, subject: str, attachments: list = None):
-  message = MIMEMultipart('alternative')
-  message['From'] = formataddr((EMAIL_SENDER['name'], EMAIL_SENDER['address']))
-  message['To'] = receiver_email
-  message['Subject'] = subject
+def send_email(to: str, subject: str, body: str, from_address: str = 'noreply@fastsite.it'):
+  api_key = os.getenv('RESEND_API_KEY')
+  if not api_key:
+    raise RuntimeError('RESEND_API_KEY non impostata')
 
-  if isinstance(body, dict) and 'text' in body and 'html' in body:
-    text = body['text']
-    html = body['html']
-    part1 = MIMEText(text, 'plain')
-    part2 = MIMEText(html, 'html')
-    message.attach(part1)
-    message.attach(part2)
-  elif isinstance(body, str):
-    part1 = MIMEText(body, 'plain')
-    message.attach(part1)
-  else:
-    raise ValueError('Il corpo dell\'email deve essere un dizionario con le chiavi "text" e "html" o una stringa')
+  payload = _json.dumps({
+    'from': from_address,
+    'to': [to],
+    'subject': subject,
+    'text': body,
+  }).encode('utf-8')
 
-  if attachments:
-    for attachment in attachments:
-      part = MIMEApplication(attachment['content'])
-      part.add_header('Content-Disposition', 'attachment', filename=attachment['filename'])
-      message.attach(part)
+  req = urllib.request.Request(
+    'https://api.resend.com/emails',
+    data=payload,
+    headers={
+      'Authorization': f'Bearer {api_key}',
+      'Content-Type': 'application/json',
+    },
+    method='POST',
+  )
 
   try:
-    with smtplib.SMTP_SSL(EMAIL_SENDER['smtp_server'], EMAIL_SENDER['smtp_port']) as server:
-      server.login(EMAIL_SENDER['address'], EMAIL_SENDER['password'])
-      server.sendmail(EMAIL_SENDER['address'], receiver_email, message.as_string())
-  except Exception:
+    with urllib.request.urlopen(req) as resp:
+      if resp.status not in (200, 201):
+        raise RuntimeError(f'Resend ha risposto {resp.status}')
+  except urllib.error.HTTPError as exc:
+    error_body = exc.read().decode('utf-8', errors='replace')
     send_telegram_message(
-      f'❌ *Errore invio mail a* `{receiver_email}`\n'
-      f'*Body:* {body["text"] if isinstance(body, dict) and "text" in body else body}\n'
-      f'```\n{traceback.format_exc()}\n```'
+      f'❌ Errore Resend invio mail a {to} — {exc.code}:\n```{error_body}```'
     )
+    raise
