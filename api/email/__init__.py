@@ -11,12 +11,14 @@ def send_email(to: str, subject: str, body: str, from_address: str = 'noreply@fa
   if not api_key:
     raise RuntimeError('RESEND_API_KEY non impostata')
 
-  payload = _json.dumps({
-    'from': from_address,
-    'to': [to],
-    'subject': subject,
-    'text': body,
-  }).encode('utf-8')
+  payload = _json.dumps(
+    {
+      'from': from_address,
+      'to': [to],
+      'subject': subject,
+      'text': body,
+    }
+  ).encode('utf-8')
 
   req = urllib.request.Request(
     'https://api.resend.com/emails',
@@ -34,7 +36,5 @@ def send_email(to: str, subject: str, body: str, from_address: str = 'noreply@fa
         raise RuntimeError(f'Resend ha risposto {resp.status}')
   except urllib.error.HTTPError as exc:
     error_body = exc.read().decode('utf-8', errors='replace')
-    send_telegram_message(
-      f'❌ Errore Resend invio mail a {to} — {exc.code}:\n```{error_body}```'
-    )
+    send_telegram_message(f'❌ Errore Resend invio mail a {to} — {exc.code}:\n```{error_body}```')
     raise
