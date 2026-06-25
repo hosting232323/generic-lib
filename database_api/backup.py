@@ -4,7 +4,7 @@ import subprocess
 from datetime import datetime
 from urllib.parse import urlparse
 
-from api.telegram import send_telegram_message
+from api.telegram import send_telegram_message, escape_md
 from api.settings import POSTGRES_BACKUP_DAYS, BACKUP_FOLDER, POSTGRES_DOCKER_CONTAINER
 from api.storage import upload_file, get_all_filenames, delete_file
 
@@ -85,9 +85,9 @@ def db_backup(db_url: str, storage_type):
       send_telegram_message(
         '\n'.join(
           [
-            f'*📦 DB Backup Fallito*\n▶️ `{db_url}`\n',
-            f'*❌ Errore durante il backup ({storage_type}):*',
-            f'`{e.stderr.strip() or e.stdout.strip() or str(e)}`',
+            f'*📦 DB Backup Fallito*\n▶️ `{escape_md(db_url)}`\n',
+            f'*❌ Errore durante il backup \({escape_md(storage_type)}\):*',
+            f'```\n{e.stderr.strip() or e.stdout.strip() or str(e)}\n```',
           ]
         )
       )

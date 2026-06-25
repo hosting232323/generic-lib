@@ -6,7 +6,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
 
 from .sender import EMAIL_SENDER
-from ..telegram import send_telegram_message
+from ..telegram import send_telegram_message, escape_md
 
 
 def send_email(receiver_email: str, body, subject: str, attachments: list = None):
@@ -40,7 +40,7 @@ def send_email(receiver_email: str, body, subject: str, attachments: list = None
       server.sendmail(EMAIL_SENDER['address'], receiver_email, message.as_string())
   except Exception:
     send_telegram_message(
-      f'❌ Errore invio mail a {receiver_email}:\n'
-      f'{body["text"] if isinstance(body, dict) and "text" in body else body}```\n'
-      f'{traceback.format_exc()}\n```'
+      f'❌ *Errore invio mail a* `{escape_md(receiver_email)}`\n'
+      f'*Body:* {escape_md(body["text"] if isinstance(body, dict) and "text" in body else body)}\n'
+      f'```\n{traceback.format_exc()}\n```'
     )

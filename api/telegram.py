@@ -19,6 +19,7 @@ TELEGRAM_TOPIC = {
   'generic-be-demo': 4294967664,
   'generic-booking': 4294967351,
 }
+MAX_MESSAGE_LENGTH = 4096
 
 
 loop = asyncio.new_event_loop()
@@ -34,18 +35,19 @@ threading.Thread(target=start_loop, args=(loop,), daemon=True).start()
 
 
 def escape_md(text: str) -> str:
-  for ch in r'_*\[\]()~`>#+-=|{}.!':
+  for ch in r'\_*[]()~`>#+-=|{}.!':
     text = text.replace(ch, f'\\{ch}')
   return text
 
 
-async def send_message(text, parse_mode='MarkdownV2', topic_name=None):
-  await Bot(TELEGRAM_TOKEN).send_message(
-    chat_id=CHAT_ID,
-    text=text,
-    message_thread_id=TELEGRAM_TOPIC[topic_name] if topic_name else TELEGRAM_TOPIC[PROJECT_NAME],
-    parse_mode=parse_mode,
-  )
+async def send_message(text, topic_name=None):
+  for chunk in split_message(text):
+    await Bot(TELEGRAM_TOKEN).send_message(
+      chat_id=CHAT_ID,
+      text=chunk,
+      message_thread_id=TELEGRAM_TOPIC[topic_name] if topic_name else TELEGRAM_TOPIC[PROJECT_NAME],
+      parse_mode='MarkdownV2',
+    )
 
 
 def send_telegram_error(trace: str, endpoint: bool = True):
@@ -54,8 +56,9 @@ def send_telegram_error(trace: str, endpoint: bool = True):
 
   message = f'*Errore:*\n```\n{trace}\n```'
   if endpoint:
-    message += f'\n\n*Request Data:*\n```\n{escape_md(extract_request_data())}\n```'
-  asyncio.run_coroutine_threadsafe(send_message(message), loop)
+    message += f'\n\n*Request Data:*\n```json\n{extract_request_data()}\n```'
+
+  run_async_safe(send_message(message))
 
 
 def run_async_safe(coro):
@@ -71,8 +74,8 @@ def run_async_safe(coro):
   future.add_done_callback(callback)
 
 
-def send_telegram_message(text: str, topic_name=None):
-  run_async_safe(send_message(text, parse_mode='Markdown', topic_name=topic_name))
+def send_telegram_message(text, topic_name=None):
+  run_async_safe(send_message(text, topic_name=topic_name))
 
 
 def extract_request_data(string_result: bool = True):
@@ -87,3 +90,30 @@ def extract_request_data(string_result: bool = True):
   if json_data is not None:
     request_info['json'] = json_data
   return json.dumps(request_info, indent=2, ensure_ascii=False) if string_result else request_info
+
+
+def split_message(text: str) -> list[str]:
+  if len(text) <= MAX_MESSAGE_LENGTH:
+    return [text]
+
+  chunks = []
+  while text:
+    if len(text) <= MAX_MESSAGE_LENGTH:
+      chunks.append(text)
+      break
+
+    split_at = text.rfind('\n', 0, MAX_MESSAGE_LENGTH)
+    if split_at <= 0:
+      split_at = MAX_MESSAGE_LENGTH
+
+    segment = text[:split_at]
+    if segment.count('```') % 2 == 1:
+      block_start = segment.rfind('```')
+      split_at = text.rfind('\n', 0, block_start)
+      if split_at <= 0:
+        split_at = block_start
+
+    chunks.append(text[:split_at])
+    text = text[split_at:].lstrip('\n')
+
+  return chunks
