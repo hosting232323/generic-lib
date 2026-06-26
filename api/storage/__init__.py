@@ -50,7 +50,7 @@ def folder_backup(folder_to_backup, storage_type):
           [
             f'*📦 Folder Backup Fallito*\n▶️ `{folder_to_backup}`\n',
             f'*❌ Errore durante il backup ({storage_type}):*',
-            f'`{e.stderr.strip() or e.stdout.strip() or str(e)}`',
+            f'```\n{e.stderr.strip() or e.stdout.strip() or str(e)}\n```',
           ]
         )
       )
@@ -74,7 +74,7 @@ def check_mismatch(db_files, folder, label, storage_type, subfolder=None):
       + format_mismatch_message(
         files,
         db_files,
-        '\n*❌ File presenti solo in storage ' + storage_type + ' ({}):*',
+        f'\n*❌ File presenti solo in storage {storage_type} ({{}}):*',
         '\n✔️ Nessun file solo in storage',
       )
     )

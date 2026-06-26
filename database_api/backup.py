@@ -87,7 +87,7 @@ def db_backup(db_url: str, storage_type):
           [
             f'*📦 DB Backup Fallito*\n▶️ `{db_url}`\n',
             f'*❌ Errore durante il backup ({storage_type}):*',
-            f'`{e.stderr.strip() or e.stdout.strip() or str(e)}`',
+            f'```\n{e.stderr.strip() or e.stdout.strip() or str(e)}\n```',
           ]
         )
       )
