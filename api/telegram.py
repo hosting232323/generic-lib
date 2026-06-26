@@ -22,18 +22,6 @@ TELEGRAM_TOPIC = {
 MAX_MESSAGE_LENGTH = 4096
 
 
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
-
-
-def start_loop(loop):
-  asyncio.set_event_loop(loop)
-  loop.run_forever()
-
-
-threading.Thread(target=start_loop, args=(loop,), daemon=True).start()
-
-
 def escape_md(text: str) -> str:
   has_bold = (text.count('*') % 2 == 0) and (text.count('*') > 0)
   triple_count = text.count('```')
@@ -110,15 +98,15 @@ def send_telegram_error(trace: str, endpoint: bool = True):
   if endpoint:
     message += f'\n\n*Request Data:*\n```json\n{extract_request_data()}\n```'
 
-  run_async_safe(send_message(message))
+  send_telegram_message(message)
 
 
-def run_async_safe(coro):
-  future = asyncio.run_coroutine_threadsafe(coro, loop)
-
-  def callback(fut):
-    exc = fut.exception()
-    if exc:
+def send_telegram_message(text, topic_name=None):
+  def run():
+    try:
+      asyncio.run(send_message(text, topic_name=topic_name))
+      print('✅ Messaggio Telegram inviato con successo')  # noqa: T201
+    except Exception as exc:
       print('❌ Errore Telegram:', exc)  # noqa: T201
       try:
         with open('telegram_errors.log', 'a', encoding='utf-8') as f:
@@ -127,14 +115,8 @@ def run_async_safe(coro):
           f.write(f'{datetime.datetime.now().isoformat()} - Error: {exc}\n')
       except Exception:
         pass
-    else:
-      print('✅ Messaggio Telegram inviato con successo')  # noqa: T201
 
-  future.add_done_callback(callback)
-
-
-def send_telegram_message(text, topic_name=None):
-  run_async_safe(send_message(text, topic_name=topic_name))
+  threading.Thread(target=run, daemon=True).start()
 
 
 def extract_request_data(string_result: bool = True):
