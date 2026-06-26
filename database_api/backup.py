@@ -54,7 +54,7 @@ def data_import(db_url: str, filename: str):
     raise RuntimeError(
       f'Import del database "{db_name}" non riuscito.\n'
       f'{details or f"Il comando è terminato con codice di uscita {e.returncode}."}\n'
-      'Assicurati che il servizio Postgres sia raggiungibile and che non ci siano '
+      'Assicurati che il servizio Postgres sia raggiungibile e che non ci siano '
       'connessioni attive al database prima di ripetere l’operazione.'
     ) from e
 
