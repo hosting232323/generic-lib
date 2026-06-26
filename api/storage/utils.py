@@ -14,13 +14,13 @@ def get_full_path(folder, subfolder, ignore_dev, filename=None):
 
 
 def format_mismatch_message(first_list: list, second_list: list, success_text: str, failure_text: str):
-  mismatch_lines = list(map(lambda mismatch: f'- {mismatch}', sorted(set(first_list) - set(second_list))))
+  mismatch = sorted(set(first_list) - set(second_list))
 
-  return (
-    [failure_text]
-    if len(mismatch_lines) == 0
-    else ([success_text.format(len(mismatch_lines)), '```'] + mismatch_lines + ['```'])
-  )
+  if not mismatch:
+    return [failure_text]
+
+  mismatch_lines = [f'- {f.replace(chr(92), chr(92) * 2).replace("`", "\\`")}' for f in mismatch]
+  return [success_text.format(len(mismatch)), '```'] + mismatch_lines + ['```']
 
 
 def set_backup_env():
