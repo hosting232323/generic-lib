@@ -3,7 +3,7 @@ import subprocess
 from pathlib import Path
 
 from .utils import format_mismatch_message
-from ..telegram import send_telegram_message, escape_md
+from ..telegram import send_telegram_message
 
 from .aws import list_files_in_s3, upload_file_to_s3, delete_file_from_s3
 from .local import upload_file_local, delete_file_local, list_files_local, folder_backup_local
@@ -48,8 +48,8 @@ def folder_backup(folder_to_backup, storage_type):
       send_telegram_message(
         '\n'.join(
           [
-            f'*📦 Folder Backup Fallito*\n▶️ `{escape_md(folder_to_backup)}`\n',
-            f'*❌ Errore durante il backup \\({escape_md(storage_type)}\\):*',
+            f'*📦 Folder Backup Fallito*\n▶️ `{folder_to_backup}`\n',
+            f'*❌ Errore durante il backup ({storage_type}):*',
             f'```\n{e.stderr.strip() or e.stdout.strip() or str(e)}\n```',
           ]
         )
@@ -67,14 +67,14 @@ def check_mismatch(db_files, folder, label, storage_type, subfolder=None):
 
   send_telegram_message(
     '\n'.join(
-      [f'*📊 Report Check Mismatch*\n▶️ {escape_md(label)}\n']
+      [f'*📊 Report Check Mismatch*\n▶️ {label}\n']
       + format_mismatch_message(
-        db_files, files, '\n*❌ File presenti solo nel DB \\({}\\):*', '\n✔️ Nessun file solo nel DB'
+        db_files, files, '\n*❌ File presenti solo nel DB ({}):*', '\n✔️ Nessun file solo nel DB'
       )
       + format_mismatch_message(
         files,
         db_files,
-        f'\n*❌ File presenti solo in storage {escape_md(storage_type)} \\({{}}\\):*',
+        f'\n*❌ File presenti solo in storage {storage_type} ({{}}):*',
         '\n✔️ Nessun file solo in storage',
       )
     )
