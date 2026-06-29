@@ -1,12 +1,17 @@
 import jwt
 import uuid
 import pytz
+import traceback
 from flask import request
+from functools import wraps
 from google.oauth2 import id_token
 from datetime import datetime, timedelta
 from google.auth.transport import requests
 
+from ..log import write_log
 from ..email import send_email
+from ..settings import SWAGGER_KEY
+from ..telegram import send_telegram_error
 from database_api.operations import create, delete, update
 from .setup import get_user_by_email, get_user_by_pass_token, User, DECODE_JWT_TOKEN, GOOGLE_CLIENT_ID, SESSION_HOURS
 
@@ -91,10 +96,10 @@ def google_login(google_token: str, register_email: dict = None, params: dict = 
   return {'status': 'ok', 'user_id': user.id, 'token': create_jwt_token(user.email)}
 
 
-def create_jwt_token(email: str):
+def create_jwt_token(value: str, token_field: str = 'email'):
   return jwt.encode(
     {
-      'email': email,
+      token_field: value,
       'exp': (datetime.now(pytz.timezone('Europe/Rome')) + timedelta(hours=SESSION_HOURS))
       .astimezone(pytz.utc)
       .timestamp(),
@@ -102,6 +107,61 @@ def create_jwt_token(email: str):
     DECODE_JWT_TOKEN,
     algorithm='HS256',
   )
+
+
+def build_session_authentication(get_user, *, token_field='email', static_folder=None, swagger=False, refresh=True):
+  def flask_session_authentication(roles=None):
+    if callable(roles):
+      return _decorate(roles, None)
+    return lambda func: _decorate(func, roles)
+
+  def _decorate(func, roles):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+      if swagger:
+        if not SWAGGER_KEY:
+          return {'status': 'ko', 'message': 'Errore autenticazione'}
+        swagger_key = request.headers.get('SwaggerAuthorization')
+        if swagger_key:
+          if swagger_key != SWAGGER_KEY:
+            return {'status': 'ko', 'message': 'Swagger key non valida'}
+          return func(None, *args, **kwargs)
+
+      auth_header = request.headers.get('Authorization')
+      if not auth_header or auth_header == 'null':
+        return {'status': 'session', 'error': 'Token assente'}
+
+      user = None
+      try:
+        user = get_user(jwt.decode(auth_header, DECODE_JWT_TOKEN, algorithms=['HS256'])[token_field])
+        if not user:
+          return {'status': 'session', 'error': 'Utente non trovato'}
+
+        if roles and user.role not in roles:
+          return {'status': 'session', 'error': 'Ruolo non autorizzato'}
+
+        result = func(user, *args, **kwargs)
+        if refresh and isinstance(result, dict):
+          result['new_token'] = create_jwt_token(getattr(user, token_field), token_field)
+        if static_folder:
+          write_log(user, static_folder, result)
+        return result
+
+      except jwt.ExpiredSignatureError:
+        return {'status': 'session', 'error': 'Token scaduto'}
+      except jwt.InvalidTokenError:
+        return {'status': 'session', 'error': 'Token non valido'}
+      except Exception:
+        traceback.print_exc()
+        tb = traceback.format_exc()
+        send_telegram_error(tb)
+        if static_folder and user is not None:
+          write_log(user, static_folder, {'status': 'ko', 'error': 'Errore generico', 'traceback': tb})
+        return {'status': 'ko', 'error': 'Errore generico'}
+
+    return wrapper
+
+  return flask_session_authentication
 
 
 def flask_session_authentication(func):
