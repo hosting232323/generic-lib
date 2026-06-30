@@ -37,4 +37,3 @@ def send_email(to: str, subject: str, body: str, from_address: str = 'noreply@fa
   except urllib.error.HTTPError as exc:
     error_body = exc.read().decode('utf-8', errors='replace')
     send_telegram_message(f'❌ Errore Resend invio mail a {to} — {exc.code}:\n```{error_body}```')
-    raise
