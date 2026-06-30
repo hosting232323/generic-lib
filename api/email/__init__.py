@@ -9,7 +9,8 @@ from ..telegram import send_telegram_message
 def send_email(to: str, subject: str, body: str, from_address: str = 'noreply@fastsite.it'):
   api_key = os.getenv('RESEND_API_KEY')
   if not api_key:
-    raise RuntimeError('RESEND_API_KEY non impostata')
+    send_telegram_message('❌ Errore mail: RESEND_API_KEY non impostata')
+    return
 
   payload = _json.dumps(
     {
@@ -34,6 +35,6 @@ def send_email(to: str, subject: str, body: str, from_address: str = 'noreply@fa
     with urllib.request.urlopen(req) as resp:
       if resp.status not in (200, 201):
         raise RuntimeError(f'Resend ha risposto {resp.status}')
-  except urllib.error.HTTPError as exc:
-    error_body = exc.read().decode('utf-8', errors='replace')
-    send_telegram_message(f'❌ Errore Resend invio mail a {to} — {exc.code}:\n```{error_body}```')
+  except Exception as exc:
+    error_msg = str(exc)
+    send_telegram_message(f'❌ Errore Resend invio mail a {to}:\n```{error_msg}```')
