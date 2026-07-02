@@ -7,12 +7,12 @@ from ..telegram import extract_request_data
 from .serialization import cap_request, cap_field, log_default
 
 
-def write_log(user, static_folder, response=None):
+def write_log(user, log_folder, response=None):
   request_info = extract_request_data(False)
   request_info.pop('headers', None)
 
   now = datetime.now(ROME_TZ)
-  month_dir = get_log_dir(static_folder) / now.strftime('%Y-%m')
+  month_dir = get_log_dir(log_folder) / now.strftime('%Y-%m')
   month_dir.mkdir(parents=True, exist_ok=True)
   log_file = month_dir / f'{now.strftime("%Y-%m-%d")}.jsonl'
   line = json.dumps(

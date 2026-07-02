@@ -109,7 +109,7 @@ def create_jwt_token(value: str, token_field: str = 'email'):
   )
 
 
-def build_session_authentication(get_user, *, token_field='email', static_folder=None, swagger=False, refresh=True):
+def build_session_authentication(get_user=get_user_by_email, *, token_field='email', log_folder, swagger=False, refresh=True):
   def flask_session_authentication(roles=None):
     if callable(roles):
       return _decorate(roles, None)
@@ -143,8 +143,7 @@ def build_session_authentication(get_user, *, token_field='email', static_folder
         result = func(user, *args, **kwargs)
         if refresh and isinstance(result, dict):
           result['new_token'] = create_jwt_token(getattr(user, token_field), token_field)
-        if static_folder:
-          write_log(user, static_folder, result)
+        write_log(user, log_folder, result)
         return result
 
       except jwt.ExpiredSignatureError:
@@ -155,8 +154,8 @@ def build_session_authentication(get_user, *, token_field='email', static_folder
         traceback.print_exc()
         tb = traceback.format_exc()
         send_telegram_error(tb)
-        if static_folder and user is not None:
-          write_log(user, static_folder, {'status': 'ko', 'error': 'Errore generico', 'traceback': tb})
+        if user is not None:
+          write_log(user, log_folder, {'status': 'ko', 'error': 'Errore generico', 'traceback': tb})
         return {'status': 'ko', 'error': 'Errore generico'}
 
     return wrapper

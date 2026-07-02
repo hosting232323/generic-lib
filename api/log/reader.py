@@ -5,7 +5,7 @@ from .dates import parse_date_filter, in_range
 from .index import ensure_index, read_index, read_entry
 
 
-def query_logs(filters: list, static_folder) -> list:
+def query_logs(filters: list, log_folder) -> list:
   def get(model, field):
     f = next((f for f in filters if f.get('model') == model and f.get('field') == field), None)
     return f['value'] if f else None
@@ -16,12 +16,12 @@ def query_logs(filters: list, static_folder) -> list:
 
   return [
     {**format_log(entry), 'user_id': entry['user_id'], 'nickname': entry['nickname']}
-    for entry in iter_logs(get_log_dir(static_folder), start=start, end=end, user_id=user_id, status=status)
+    for entry in iter_logs(get_log_dir(log_folder), start=start, end=end, user_id=user_id, status=status)
   ]
 
 
-def find_log(log_id: str, static_folder) -> dict | None:
-  log_file = get_log_dir(static_folder) / log_id[:7] / f'{log_id[:10]}.jsonl'
+def find_log(log_id: str, log_folder) -> dict | None:
+  log_file = get_log_dir(log_folder) / log_id[:7] / f'{log_id[:10]}.jsonl'
   if not log_file.exists():
     return None
 
