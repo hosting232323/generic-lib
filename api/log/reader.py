@@ -15,7 +15,7 @@ def query_logs(filters: list, log_folder) -> list:
   start, end = parse_date_filter(get('Log', 'created_at'))
 
   return [
-    {**format_log(entry), 'user_id': entry['user_id'], 'nickname': entry['nickname']}
+    {**format_log(entry), 'user_id': entry['user_id'], 'nickname': entry.get('nickname')}
     for entry in iter_logs(get_log_dir(log_folder), start=start, end=end, user_id=user_id, status=status)
   ]
 

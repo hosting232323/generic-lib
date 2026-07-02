@@ -19,7 +19,7 @@ def write_log(user, log_folder, response=None):
     {
       'ts': now.isoformat(),
       'user_id': user.id,
-      'nickname': user.nickname,
+      'nickname': getattr(user, 'nickname', None) or getattr(user, 'email', None),
       'request': cap_request(request_info),
       'response': cap_field(response),
     },
