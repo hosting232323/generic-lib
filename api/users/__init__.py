@@ -109,7 +109,9 @@ def create_jwt_token(value: str, token_field: str = 'email'):
   )
 
 
-def build_session_authentication(get_user=get_user_by_email, *, token_field='email', log_folder, swagger=False, refresh=True):
+def build_session_authentication(
+  get_user=get_user_by_email, *, token_field='email', log_folder, swagger=False, refresh=True
+):
   def flask_session_authentication(roles=None):
     if callable(roles):
       return _decorate(roles, None)
