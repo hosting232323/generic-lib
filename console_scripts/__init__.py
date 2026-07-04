@@ -16,7 +16,7 @@ def db_import():
 def setup_project():
   response = requests.get(f'https://fastsite.it/api/setup-project?project_type={sys.argv[1]}').json()
   if response['status'] == 'ko':
-    raise Exception(response['error'])
+    raise Exception(response['message'])
 
   create_files_and_folders(response['setup'], '.')
   if not os.path.exists('.env'):
