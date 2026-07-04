@@ -17,7 +17,7 @@ from .setup import get_user_by_email, get_user_by_pass_token, User, DECODE_JWT_T
 
 def register_user(email: str, register_email: dict, password: str = None, params: dict = {}):
   if get_user_by_email(email):
-    return {'status': 'ko', 'error': 'Email già in uso'}
+    return {'status': 'ko', 'message': 'Email già in uso'}
 
   params['email'] = email
   if password:
@@ -40,7 +40,7 @@ def register_user(email: str, register_email: dict, password: str = None, params
 def delete_user(email: str):
   user = get_user_by_email(email)
   if not user:
-    return {'status': 'ko', 'error': 'Utente non trovato'}
+    return {'status': 'ko', 'message': 'Utente non trovato'}
   delete(user)
   return {'status': 'ok', 'message': 'Utente eliminato'}
 
@@ -48,7 +48,7 @@ def delete_user(email: str):
 def login(email: str, password: str, get_user=False):
   user = get_user_by_email(email)
   if not user or user.email != email or user.password != password:
-    response = {'status': 'ko', 'error': 'Credenziali errate'}
+    response = {'status': 'ko', 'message': 'Credenziali errate'}
     return (response, None) if get_user else response
 
   response = {'status': 'ok', 'token': create_jwt_token(user.email)}
@@ -58,7 +58,7 @@ def login(email: str, password: str, get_user=False):
 def ask_change_password(email: str, change_password_email: dict):
   user = get_user_by_email(email)
   if not user:
-    return {'status': 'ko', 'error': 'Utente non trovato'}
+    return {'status': 'ko', 'message': 'Utente non trovato'}
 
   user: User = update(user, {'pass_token': str(uuid.uuid4())})
 
@@ -73,7 +73,7 @@ def ask_change_password(email: str, change_password_email: dict):
 def change_password(pass_token: str, new_password: str):
   user = get_user_by_pass_token(pass_token)
   if not user:
-    return {'status': 'ko', 'error': 'Questa pagina è scaduta'}
+    return {'status': 'ko', 'message': 'Questa pagina è scaduta'}
 
   update(user, {'password': new_password, 'pass_token': None})
   return {'status': 'ok', 'message': 'Password aggiornata con successo'}
@@ -85,7 +85,7 @@ def google_login(google_token: str, register_email: dict = None, params: dict = 
 
   if not user:
     if not register_email:
-      return {'status': 'ko', 'error': 'User not found and registration is not enabled'}
+      return {'status': 'ko', 'message': 'User not found and registration is not enabled'}
 
     register_result = register_user(email=email, register_email=register_email, password=None, params=params)
     if register_result['status'] == 'ko':
@@ -145,8 +145,8 @@ def build_session_authentication(log_folder, get_user=get_user_by_email, token_f
         tb = traceback.format_exc()
         send_telegram_error(tb)
         if user is not None:
-          write_log(user, log_folder, {'status': 'ko', 'error': 'Errore generico', 'traceback': tb})
-        return {'status': 'ko', 'error': 'Errore generico'}
+          write_log(user, log_folder, {'status': 'ko', 'message': 'Errore generico', 'traceback': tb})
+        return {'status': 'ko', 'message': 'Errore generico'}
 
     return wrapper
 
