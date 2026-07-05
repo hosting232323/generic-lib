@@ -126,7 +126,6 @@ def build_session_authentication(log_folder, get_user=get_user_by_email, token_f
         if roles and user.role not in roles:
           return {'status': 'session', 'error': 'Ruolo non autorizzato'}
 
-        # identità per il log centralizzato in register_flask_hooks: qui non si scrive
         g.log_user = user
         result = func(user, *args, **kwargs)
         if refresh and isinstance(result, dict):
