@@ -11,31 +11,25 @@ EXCLUDED_PATHS = ('/',)
 EXCLUDED_PREFIXES = ('/swagger', '/photos')
 
 
-def register_flask_hooks(app, log_folder=None, excluded_paths=EXCLUDED_PATHS, excluded_prefixes=EXCLUDED_PREFIXES):
-  @app.errorhandler(Exception)
-  def handle_exception(error):
-    if isinstance(error, HTTPException):
-      return error
+def handle_exception(error):
+  if isinstance(error, HTTPException):
+    return error
 
+  traceback.print_exc()
+  g.log_traceback = traceback.format_exc()
+  send_telegram_error(g.log_traceback)
+  return {'status': 'ko', 'message': 'Errore generico'}, 200
+
+
+def log_request(response, log_folder, excluded_paths, excluded_prefixes):
+  try:
+    if is_loggable(excluded_paths, excluded_prefixes):
+      body = extract_response(response)
+      if body is not None:
+        write_log(g.get('log_user'), log_folder, body, swagger=g.get('log_swagger', False))
+  except Exception:
     traceback.print_exc()
-    g.log_traceback = traceback.format_exc()
-    send_telegram_error(g.log_traceback)
-    return {'status': 'ko', 'message': 'Errore generico'}, 200
-
-  if log_folder:
-
-    @app.after_request
-    def log_request(response):
-      try:
-        if is_loggable(excluded_paths, excluded_prefixes):
-          body = extract_response(response)
-          if body is not None:
-            write_log(g.get('log_user'), log_folder, body, swagger=g.get('log_swagger', False))
-      except Exception:
-        traceback.print_exc()
-      return response
-
-  return app
+  return response
 
 
 def is_loggable(excluded_paths, excluded_prefixes):

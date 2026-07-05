@@ -1,10 +1,23 @@
 from flask import g, request
 
+from . import hooks
 from .settings import SWAGGER_KEY
-from .hooks import register_flask_hooks
 
 
-__all__ = ['register_flask_hooks', 'swagger_decorator', 'PrefixMiddleware']
+def register_flask_hooks(
+  app, log_folder=None, excluded_paths=hooks.EXCLUDED_PATHS, excluded_prefixes=hooks.EXCLUDED_PREFIXES
+):
+  @app.errorhandler(Exception)
+  def handle_exception(error):
+    return hooks.handle_exception(error)
+
+  if log_folder:
+
+    @app.after_request
+    def log_request(response):
+      return hooks.log_request(response, log_folder, excluded_paths, excluded_prefixes)
+
+  return app
 
 
 def swagger_decorator(func):
