@@ -1,21 +1,10 @@
-import traceback
-from flask import request
+from flask import g, request
 
 from .settings import SWAGGER_KEY
-from .telegram import send_telegram_error
+from .hooks import register_flask_hooks
 
 
-def error_catching_decorator(func):
-  def wrapper(*args, **kwargs):
-    try:
-      return func(*args, **kwargs)
-    except Exception:
-      traceback.print_exc()
-      send_telegram_error(traceback.format_exc())
-      return {'status': 'ko', 'message': 'Errore generico'}
-
-  wrapper.__name__ = func.__name__
-  return wrapper
+__all__ = ['register_flask_hooks', 'swagger_decorator', 'PrefixMiddleware']
 
 
 def swagger_decorator(func):
@@ -26,6 +15,7 @@ def swagger_decorator(func):
     if 'SwaggerAuthorization' not in request.headers or request.headers['SwaggerAuthorization'] != SWAGGER_KEY:
       return {'status': 'ko', 'message': 'Autorizzazione negata'}
 
+    g.log_swagger = True
     return func(*args, **kwargs)
 
   wrapper.__name__ = func.__name__

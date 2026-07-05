@@ -1,16 +1,13 @@
 import jwt
 import uuid
 import pytz
-import traceback
-from flask import request
+from flask import g, request
 from functools import wraps
 from google.oauth2 import id_token
 from datetime import datetime, timedelta
 from google.auth.transport import requests
 
-from ..log import write_log
 from ..email import send_email
-from ..telegram import send_telegram_error
 from database_api.operations import create, delete, update
 from .setup import get_user_by_email, get_user_by_pass_token, User, DECODE_JWT_TOKEN, GOOGLE_CLIENT_ID, SESSION_HOURS
 
@@ -121,7 +118,6 @@ def build_session_authentication(log_folder, get_user=get_user_by_email, token_f
       if not auth_header or auth_header == 'null':
         return {'status': 'session', 'error': 'Token assente'}
 
-      user = None
       try:
         user = get_user(jwt.decode(auth_header, DECODE_JWT_TOKEN, algorithms=['HS256'])[token_field])
         if not user:
@@ -130,23 +126,17 @@ def build_session_authentication(log_folder, get_user=get_user_by_email, token_f
         if roles and user.role not in roles:
           return {'status': 'session', 'error': 'Ruolo non autorizzato'}
 
+        # identità per il log centralizzato in register_flask_hooks: qui non si scrive
+        g.log_user = user
         result = func(user, *args, **kwargs)
         if refresh and isinstance(result, dict):
           result['new_token'] = create_jwt_token(getattr(user, token_field), token_field)
-        write_log(user, log_folder, result)
         return result
 
       except jwt.ExpiredSignatureError:
         return {'status': 'session', 'error': 'Token scaduto'}
       except jwt.InvalidTokenError:
         return {'status': 'session', 'error': 'Token non valido'}
-      except Exception:
-        traceback.print_exc()
-        tb = traceback.format_exc()
-        send_telegram_error(tb)
-        if user is not None:
-          write_log(user, log_folder, {'status': 'ko', 'message': 'Errore generico', 'traceback': tb})
-        return {'status': 'ko', 'message': 'Errore generico'}
 
     return wrapper
 
@@ -160,9 +150,9 @@ def flask_session_authentication(func):
       return {'status': 'session', 'error': 'Token assente'}
 
     try:
-      return func(
-        get_user_by_email(jwt.decode(auth_header, DECODE_JWT_TOKEN, algorithms=['HS256'])['email']), *args, **kwargs
-      )
+      user = get_user_by_email(jwt.decode(auth_header, DECODE_JWT_TOKEN, algorithms=['HS256'])['email'])
+      g.log_user = user
+      return func(user, *args, **kwargs)
     except jwt.ExpiredSignatureError:
       return {'status': 'session', 'error': 'Token scaduto'}
     except jwt.InvalidTokenError:
@@ -183,6 +173,7 @@ def flask_session_authentication_restore(func):
       if not user:
         return {'status': 'session', 'error': 'Utente non trovato'}
 
+      g.log_user = user
       result = func(user, *args, **kwargs)
       if isinstance(result, dict):
         result['new_token'] = create_jwt_token(user.email)

@@ -4,10 +4,10 @@ from datetime import datetime
 from .dates import ROME_TZ
 from .paths import get_log_dir
 from ..telegram import extract_request_data
-from .serialization import cap_request, cap_field, log_default
+from .serialization import cap_request, cap_field, log_default, redact
 
 
-def write_log(user, log_folder, response=None):
+def write_log(user, log_folder, response=None, swagger=False):
   request_info = extract_request_data(False)
   request_info.pop('headers', None)
 
@@ -18,10 +18,10 @@ def write_log(user, log_folder, response=None):
   line = json.dumps(
     {
       'ts': now.isoformat(),
-      'user_id': user.id,
-      'nickname': getattr(user, 'nickname', None) or getattr(user, 'email', None),
-      'request': cap_request(request_info),
-      'response': cap_field(response),
+      'user_id': user.id if user else None,
+      'nickname': get_nickname(user, swagger),
+      'request': cap_request(redact(request_info)),
+      'response': cap_field(redact(response)),
     },
     ensure_ascii=False,
     default=log_default,
@@ -30,3 +30,9 @@ def write_log(user, log_folder, response=None):
   with open(log_file, 'a', encoding='utf-8') as file:
     file.write(line)
     file.write('\n')
+
+
+def get_nickname(user, swagger):
+  if user:
+    return getattr(user, 'nickname', None) or getattr(user, 'email', None)
+  return 'swagger' if swagger else None
