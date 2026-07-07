@@ -116,15 +116,15 @@ def build_session_authentication(log_folder, get_user=get_user_by_email, token_f
     def wrapper(*args, **kwargs):
       auth_header = request.headers.get('Authorization')
       if not auth_header or auth_header == 'null':
-        return {'status': 'session', 'error': 'Token assente'}
+        return {'status': 'session', 'message': 'Token assente'}
 
       try:
         user = get_user(jwt.decode(auth_header, DECODE_JWT_TOKEN, algorithms=['HS256'])[token_field])
         if not user:
-          return {'status': 'session', 'error': 'Utente non trovato'}
+          return {'status': 'session', 'message': 'Utente non trovato'}
 
         if roles and user.role not in roles:
-          return {'status': 'session', 'error': 'Ruolo non autorizzato'}
+          return {'status': 'session', 'message': 'Ruolo non autorizzato'}
 
         g.log_user = user
         result = func(user, *args, **kwargs)
@@ -133,9 +133,9 @@ def build_session_authentication(log_folder, get_user=get_user_by_email, token_f
         return result
 
       except jwt.ExpiredSignatureError:
-        return {'status': 'session', 'error': 'Token scaduto'}
+        return {'status': 'session', 'message': 'Token scaduto'}
       except jwt.InvalidTokenError:
-        return {'status': 'session', 'error': 'Token non valido'}
+        return {'status': 'session', 'message': 'Token non valido'}
 
     return wrapper
 
@@ -146,16 +146,16 @@ def flask_session_authentication(func):
   def wrapper(*args, **kwargs):
     auth_header = request.headers.get('Authorization')
     if not auth_header or auth_header == 'null':
-      return {'status': 'session', 'error': 'Token assente'}
+      return {'status': 'session', 'message': 'Token assente'}
 
     try:
       user = get_user_by_email(jwt.decode(auth_header, DECODE_JWT_TOKEN, algorithms=['HS256'])['email'])
       g.log_user = user
       return func(user, *args, **kwargs)
     except jwt.ExpiredSignatureError:
-      return {'status': 'session', 'error': 'Token scaduto'}
+      return {'status': 'session', 'message': 'Token scaduto'}
     except jwt.InvalidTokenError:
-      return {'status': 'session', 'error': 'Token non valido'}
+      return {'status': 'session', 'message': 'Token non valido'}
 
   wrapper.__name__ = func.__name__
   return wrapper
@@ -165,12 +165,12 @@ def flask_session_authentication_restore(func):
   def wrapper(*args, **kwargs):
     auth_header = request.headers.get('Authorization')
     if not auth_header or auth_header == 'null':
-      return {'status': 'session', 'error': 'Token assente'}
+      return {'status': 'session', 'message': 'Token assente'}
 
     try:
       user = get_user_by_email(jwt.decode(auth_header, DECODE_JWT_TOKEN, algorithms=['HS256'])['email'])
       if not user:
-        return {'status': 'session', 'error': 'Utente non trovato'}
+        return {'status': 'session', 'message': 'Utente non trovato'}
 
       g.log_user = user
       result = func(user, *args, **kwargs)
@@ -179,9 +179,9 @@ def flask_session_authentication_restore(func):
       return result
 
     except jwt.ExpiredSignatureError:
-      return {'status': 'session', 'error': 'Token scaduto'}
+      return {'status': 'session', 'message': 'Token scaduto'}
     except jwt.InvalidTokenError:
-      return {'status': 'session', 'error': 'Token non valido'}
+      return {'status': 'session', 'message': 'Token non valido'}
 
   wrapper.__name__ = func.__name__
   return wrapper
