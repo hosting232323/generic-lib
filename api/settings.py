@@ -1,8 +1,8 @@
 import os
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 
 
-load_dotenv()
+load_dotenv(find_dotenv(usecwd=True))
 
 
 API_PREFIX = os.environ.get('API_PREFIX')
