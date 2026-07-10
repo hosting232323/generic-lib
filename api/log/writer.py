@@ -18,14 +18,11 @@ def write_log(user, log_folder, response=None, swagger=False, user_field=DEFAULT
   month_dir = get_log_dir(log_folder) / now.strftime('%Y-%m')
   month_dir.mkdir(parents=True, exist_ok=True)
   log_file = month_dir / f'{now.strftime("%Y-%m-%d")}.jsonl'
-  user_identifier, user_identifier_field = get_user_identifier(user, swagger, user_field)
   line = json.dumps(
     {
       'ts': now.isoformat(),
       'user_id': user.id if user else None,
-      'nickname': user_identifier,
-      'user_identifier': user_identifier,
-      'user_identifier_field': user_identifier_field,
+      'identifier': get_user_identifier(user, swagger, user_field),
       'request': cap_request(redact(request_info)),
       'response': cap_field(redact(response)),
     },
@@ -41,5 +38,5 @@ def write_log(user, log_folder, response=None, swagger=False, user_field=DEFAULT
 def get_user_identifier(user, swagger, user_field=DEFAULT_USER_LOG_FIELD):
   if user:
     field = user_field or DEFAULT_USER_LOG_FIELD
-    return getattr(user, field, None), field
-  return ('swagger', 'swagger') if swagger else (None, None)
+    return getattr(user, field, None)
+  return 'swagger' if swagger else None

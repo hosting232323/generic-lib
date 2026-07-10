@@ -47,13 +47,14 @@ def format_log(entry: dict) -> dict:
 
 
 def format_user_log_fields(entry: dict) -> dict:
-  user_identifier = entry.get('user_identifier') or entry.get('nickname')
   return {
     'user_id': entry.get('user_id'),
-    'nickname': user_identifier,
-    'user_identifier': user_identifier,
-    'user_identifier_field': entry.get('user_identifier_field'),
+    'identifier': get_identifier(entry),
   }
+
+
+def get_identifier(entry: dict):
+  return entry.get('identifier') or entry.get('user_identifier') or entry.get('nickname')
 
 
 def iter_logs(log_dir, start=None, end=None, user_id=None, status=None, limit=100):

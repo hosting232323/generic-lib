@@ -13,13 +13,11 @@ def index_record(entry: dict, off: int) -> dict:
   request_info = entry.get('request') or {}
   response = entry.get('response')
   response = response if isinstance(response, dict) else {}
-  user_identifier = entry.get('user_identifier') or entry.get('nickname')
+  identifier = entry.get('identifier') or entry.get('user_identifier') or entry.get('nickname')
   return {
     'ts': entry.get('ts'),
     'user_id': entry.get('user_id'),
-    'nickname': user_identifier,
-    'user_identifier': user_identifier,
-    'user_identifier_field': entry.get('user_identifier_field'),
+    'identifier': identifier,
     'status': response.get('status'),
     'method': request_info.get('method'),
     'path': request_info.get('path'),
