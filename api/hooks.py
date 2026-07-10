@@ -46,9 +46,6 @@ def is_loggable(excluded_paths, excluded_prefixes):
 
 def extract_response(response):
   identified = g.get('log_user') is not None or g.get('log_swagger', False)
-
-  # risposte streaming/file (send_file, generatori) o non JSON: il body non va letto,
-  # si logga un sommario e solo per richieste identificate (evita rumore da scanner/404)
   if response.direct_passthrough or not response.is_json:
     if not identified and not g.get('log_traceback'):
       return None

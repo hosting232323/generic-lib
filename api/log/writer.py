@@ -39,4 +39,5 @@ def get_user_identifier(user, swagger, user_field=DEFAULT_USER_LOG_FIELD):
   if user:
     field = user_field or DEFAULT_USER_LOG_FIELD
     return getattr(user, field, None)
+
   return 'swagger' if swagger else None
