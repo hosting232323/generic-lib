@@ -7,10 +7,10 @@ from ..telegram import extract_request_data
 from .serialization import cap_request, cap_field, log_default, redact
 
 
-DEFAULT_USER_LOG_FIELDS = ('email', 'nickname')
+DEFAULT_USER_LOG_FIELD = 'email'
 
 
-def write_log(user, log_folder, response=None, swagger=False, user_fields=DEFAULT_USER_LOG_FIELDS):
+def write_log(user, log_folder, response=None, swagger=False, user_field=DEFAULT_USER_LOG_FIELD):
   request_info = extract_request_data(False)
   request_info.pop('headers', None)
 
@@ -18,7 +18,7 @@ def write_log(user, log_folder, response=None, swagger=False, user_fields=DEFAUL
   month_dir = get_log_dir(log_folder) / now.strftime('%Y-%m')
   month_dir.mkdir(parents=True, exist_ok=True)
   log_file = month_dir / f'{now.strftime("%Y-%m-%d")}.jsonl'
-  user_identifier, user_identifier_field = get_user_identifier(user, swagger, user_fields)
+  user_identifier, user_identifier_field = get_user_identifier(user, swagger, user_field)
   line = json.dumps(
     {
       'ts': now.isoformat(),
@@ -38,17 +38,8 @@ def write_log(user, log_folder, response=None, swagger=False, user_fields=DEFAUL
     file.write('\n')
 
 
-def get_user_identifier(user, swagger, user_fields=DEFAULT_USER_LOG_FIELDS):
+def get_user_identifier(user, swagger, user_field=DEFAULT_USER_LOG_FIELD):
   if user:
-    for field in normalize_user_fields(user_fields):
-      value = getattr(user, field, None)
-      if value:
-        return value, field
-    return None, None
+    field = user_field or DEFAULT_USER_LOG_FIELD
+    return getattr(user, field, None), field
   return ('swagger', 'swagger') if swagger else (None, None)
-
-
-def normalize_user_fields(user_fields):
-  if isinstance(user_fields, str):
-    return (user_fields,)
-  return tuple(user_fields or DEFAULT_USER_LOG_FIELDS)

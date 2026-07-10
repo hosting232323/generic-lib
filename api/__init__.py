@@ -9,7 +9,7 @@ def register_flask_hooks(
   log_folder,
   excluded_paths=hooks.EXCLUDED_PATHS,
   excluded_prefixes=hooks.EXCLUDED_PREFIXES,
-  user_log_fields=None,
+  user_log_field=None,
 ):
   @app.errorhandler(Exception)
   def handle_exception(error):
@@ -17,7 +17,7 @@ def register_flask_hooks(
 
   @app.after_request
   def log_request(response):
-    return hooks.log_request(response, log_folder, excluded_paths, excluded_prefixes, user_log_fields)
+    return hooks.log_request(response, log_folder, excluded_paths, excluded_prefixes, user_log_field)
 
   return app
 
