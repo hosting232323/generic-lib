@@ -21,12 +21,12 @@ def handle_exception(error):
   return {'status': 'ko', 'message': 'Errore generico'}, 200
 
 
-def log_request(response, log_folder, excluded_paths, excluded_prefixes):
+def log_request(response, log_folder, excluded_paths, excluded_prefixes, user_log_fields=None):
   try:
     if is_loggable(excluded_paths, excluded_prefixes):
       body = extract_response(response)
       if body is not None:
-        write_log(g.get('log_user'), log_folder, body, swagger=g.get('log_swagger', False))
+        write_log(g.get('log_user'), log_folder, body, swagger=g.get('log_swagger', False), user_fields=user_log_fields)
   except Exception:
     traceback.print_exc()
   return response

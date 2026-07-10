@@ -5,7 +5,11 @@ from .settings import SWAGGER_KEY
 
 
 def register_flask_hooks(
-  app, log_folder, excluded_paths=hooks.EXCLUDED_PATHS, excluded_prefixes=hooks.EXCLUDED_PREFIXES
+  app,
+  log_folder,
+  excluded_paths=hooks.EXCLUDED_PATHS,
+  excluded_prefixes=hooks.EXCLUDED_PREFIXES,
+  user_log_fields=None,
 ):
   @app.errorhandler(Exception)
   def handle_exception(error):
@@ -13,7 +17,7 @@ def register_flask_hooks(
 
   @app.after_request
   def log_request(response):
-    return hooks.log_request(response, log_folder, excluded_paths, excluded_prefixes)
+    return hooks.log_request(response, log_folder, excluded_paths, excluded_prefixes, user_log_fields)
 
   return app
 

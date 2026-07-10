@@ -15,7 +15,7 @@ def query_logs(filters: list, log_folder) -> list:
   start, end = parse_date_filter(get('Log', 'created_at'))
 
   return [
-    {**format_log(entry), 'user_id': entry['user_id'], 'nickname': entry.get('nickname')}
+    {**format_log(entry), **format_user_log_fields(entry)}
     for entry in iter_logs(get_log_dir(log_folder), start=start, end=end, user_id=user_id, status=status)
   ]
 
@@ -43,6 +43,16 @@ def format_log(entry: dict) -> dict:
     'method': request_info.get('method'),
     'endpoint': request_info.get('path'),
     'content': json.dumps({'request': entry.get('request'), 'response': entry.get('response')}),
+  }
+
+
+def format_user_log_fields(entry: dict) -> dict:
+  user_identifier = entry.get('user_identifier') or entry.get('nickname')
+  return {
+    'user_id': entry.get('user_id'),
+    'nickname': user_identifier,
+    'user_identifier': user_identifier,
+    'user_identifier_field': entry.get('user_identifier_field'),
   }
 
 
