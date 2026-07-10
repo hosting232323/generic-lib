@@ -4,6 +4,26 @@ import decimal
 from .paths import LOG_MAX_FIELD_CHARS, LOG_MAX_LINE_BYTES
 
 
+REDACTED_KEYS = {
+  'password',
+  'new_password',
+  'old_password',
+  'pass_token',
+  'token',
+  'new_token',
+  'google_token',
+  'stripe_api_key',
+}
+
+
+def redact(value):
+  if isinstance(value, dict):
+    return {key: '***' if key.lower() in REDACTED_KEYS else redact(val) for key, val in value.items()}
+  if isinstance(value, list):
+    return [redact(item) for item in value]
+  return value
+
+
 def parse_line(raw: bytes):
   raw = raw.strip()
   if not raw or len(raw) > LOG_MAX_LINE_BYTES:
