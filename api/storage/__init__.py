@@ -1,56 +1,53 @@
+import os
 import threading
 import subprocess
 from pathlib import Path
 
+from ..settings import IS_DEV
 from .utils import format_mismatch_message
 from ..telegram import send_telegram_message
-
-from .aws import list_files_in_s3, upload_file_to_s3, delete_file_from_s3
-from .local import upload_file_local, delete_file_local, list_files_local, folder_backup_local
-from .server import list_files_server, delete_file_server, upload_file_server, folder_backup_server
+from .local import _upload_file_local, _delete_file_local, _list_files_local, _folder_backup_local
+from .server import _upload_file_server, _delete_file_server, _list_files_server, _folder_backup_server
 
 
-def upload_file(content, filename, folder, storage_type, subfolder=None, ignore_dev=None):
-  if storage_type == 's3':
-    return upload_file_to_s3(content, filename, folder, subfolder)
-  elif storage_type == 'local':
-    return upload_file_local(content, filename, folder, subfolder, ignore_dev)
-  elif storage_type == 'server':
-    return upload_file_server(content, filename, folder, subfolder, ignore_dev)
+def upload_file(content, filename, folder, server=None, subfolder=None, ignore_dev=None):
+  full_path = get_full_path(folder, subfolder, ignore_dev, filename)
+  if not server:
+    return _upload_file_local(content, full_path)
+  else:
+    return _upload_file_server(content, full_path)
 
 
-def delete_file(filename, folder, storage_type, subfolder=None, ignore_dev=None):
-  if storage_type == 's3':
-    delete_file_from_s3(filename, folder, subfolder)
-  elif storage_type == 'local':
-    delete_file_local(filename, folder, subfolder, ignore_dev)
-  elif storage_type == 'server':
-    return delete_file_server(filename, folder, subfolder, ignore_dev)
+def delete_file(filename, folder, server=None, subfolder=None, ignore_dev=None):
+  full_path = get_full_path(folder, subfolder, ignore_dev, filename)
+  if not server:
+    return _delete_file_local(full_path)
+  else:
+    return _delete_file_server(full_path)
 
 
-def get_all_filenames(folder, storage_type, subfolder=None, ignore_dev=None):
-  if storage_type == 's3':
-    return list_files_in_s3(folder, subfolder)
-  elif storage_type == 'local':
-    return list_files_local(folder, subfolder, ignore_dev)
-  elif storage_type == 'server':
-    return list_files_server(folder, subfolder, ignore_dev)
+def get_all_filenames(folder, server=None, subfolder=None, ignore_dev=None):
+  full_path = get_full_path(folder, subfolder, ignore_dev)
+  if not server:
+    return _list_files_local(full_path)
+  else:
+    return _list_files_server(full_path)
 
 
-def folder_backup(folder_to_backup, storage_type):
+def folder_backup(folder_to_backup, server=None):
   def run():
     try:
-      if storage_type == 'local':
-        folder_backup_local(folder_to_backup)
-      elif storage_type == 'server':
-        folder_backup_server(folder_to_backup)
+      if not server:
+        _folder_backup_local(folder_to_backup)
+      else:
+        _folder_backup_server(folder_to_backup)
     except subprocess.CalledProcessError as e:
       send_telegram_message(
         '\n'.join(
           [
             f'*📦 Folder Backup Fallito*\n▶️ `{folder_to_backup}`\n',
-            f'*❌ Errore durante il backup ({storage_type}):*',
-            f'```\n{e.stderr.strip() or e.stdout.strip() or str(e)}\n```',
+            f'*❌ Errore durante il backup ({"server" if server else "local"}):*',
+            f'`{e.stderr.strip() or e.stdout.strip() or str(e)}`',
           ]
         )
       )
@@ -59,12 +56,8 @@ def folder_backup(folder_to_backup, storage_type):
   thread.start()
 
 
-def check_mismatch(db_files, folder, label, storage_type, subfolder=None):
-  if storage_type == 's3':
-    files = [path for path in list_files_in_s3(folder, subfolder) if not path.endswith('/')]
-  elif storage_type == 'local':
-    files = [Path(path).name for path in list_files_local(folder, subfolder)]
-
+def check_mismatch(db_files, folder, label, subfolder=None):
+  files = [Path(path).name for path in _list_files_local(folder, subfolder)]
   send_telegram_message(
     '\n'.join(
       [f'*📊 Report Check Mismatch*\n▶️ {label}\n']
@@ -74,8 +67,18 @@ def check_mismatch(db_files, folder, label, storage_type, subfolder=None):
       + format_mismatch_message(
         files,
         db_files,
-        f'\n*❌ File presenti solo in storage {storage_type} ({{}}):*',
+        '\n*❌ File presenti solo in storage local ({}):*',
         '\n✔️ Nessun file solo in storage',
       )
     )
   )
+
+
+def get_full_path(folder, subfolder, ignore_dev, filename=None):
+  if not ignore_dev:
+    folder = os.path.join(folder, 'test' if IS_DEV else 'prod')
+
+  if subfolder:
+    folder = os.path.join(folder, subfolder)
+
+  return os.path.join(folder, filename) if filename else folder

@@ -3,7 +3,7 @@ import shutil
 import tempfile
 import subprocess
 
-from .utils import get_full_path, set_backup_env
+from .utils import set_backup_env
 from ..settings import BACKUP_SSH_CONFIG, BACKUP_FOLDER, SERVER_NAME
 
 
@@ -19,8 +19,7 @@ def storage_decorator(func):
 
 
 @storage_decorator
-def upload_file_server(content, filename, folder, subfolder=None, ignore_dev=None):
-  full_path = get_full_path(folder, subfolder, ignore_dev, filename)
+def _upload_file_server(content, full_path):
   subprocess.run(
     [
       'ssh',
@@ -60,8 +59,7 @@ def upload_file_server(content, filename, folder, subfolder=None, ignore_dev=Non
 
 
 @storage_decorator
-def delete_file_server(filename, folder, subfolder=None, ignore_dev=False):
-  full_path = get_full_path(folder, subfolder, ignore_dev, filename)
+def _delete_file_server(full_path):
   subprocess.run(
     [
       'ssh',
@@ -75,8 +73,7 @@ def delete_file_server(filename, folder, subfolder=None, ignore_dev=False):
 
 
 @storage_decorator
-def list_files_server(folder, subfolder=None, ignore_dev=False):
-  full_path = get_full_path(folder, subfolder, ignore_dev)
+def _list_files_server(full_path):
   return [
     os.path.join(full_path, file)
     for file in subprocess.run(
@@ -95,7 +92,7 @@ def list_files_server(folder, subfolder=None, ignore_dev=False):
 
 
 @storage_decorator
-def folder_backup_server(folder_to_backup):
+def _folder_backup_server(folder_to_backup):
   subprocess.run(
     [
       'restic',
