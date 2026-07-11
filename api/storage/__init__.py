@@ -1,10 +1,11 @@
+import os
 import threading
 import subprocess
 from pathlib import Path
 
-from .utils import format_mismatch_message, get_full_path
+from ..settings import IS_DEV
+from .utils import format_mismatch_message
 from ..telegram import send_telegram_message
-
 from .local import _upload_file_local, _delete_file_local, _list_files_local, _folder_backup_local
 from .server import _upload_file_server, _delete_file_server, _list_files_server, _folder_backup_server
 
@@ -71,3 +72,13 @@ def check_mismatch(db_files, folder, label, subfolder=None):
       )
     )
   )
+
+
+def get_full_path(folder, subfolder, ignore_dev, filename=None):
+  if not ignore_dev:
+    folder = os.path.join(folder, 'test' if IS_DEV else 'prod')
+
+  if subfolder:
+    folder = os.path.join(folder, subfolder)
+
+  return os.path.join(folder, filename) if filename else folder
