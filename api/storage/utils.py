@@ -4,7 +4,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session as session_type
 
 from database_api.operations import db_session_decorator
-from ..settings import IS_DEV, RESTIC_PASSWORD, BACKUP_FOLDER, SERVER_NAME, API_PREFIX
+from ..settings import RESTIC_PASSWORD, BACKUP_FOLDER, SERVER_NAME, API_PREFIX
 
 
 def format_mismatch_message(first_list: list, second_list: list, success_text: str, failure_text: str):
