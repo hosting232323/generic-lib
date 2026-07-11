@@ -52,4 +52,4 @@ def guess_extension(mime_type: str) -> str:
 
 
 def get_base_file_path(path):
-  return f'http{"s" if not IS_DEV else ""}://{request.host}{f"/{API_PREFIX}" if API_PREFIX else ""}/{path}/'
+  return f'{request.scheme}://{request.host}{f"/{API_PREFIX}" if API_PREFIX else ""}/{path}/'
