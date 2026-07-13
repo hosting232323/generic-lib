@@ -57,7 +57,7 @@ def folder_backup(folder_to_backup, server=None):
 
 
 def check_mismatch(db_files, folder, label, subfolder=None):
-  files = [Path(path).name for path in _list_files_local(folder, subfolder)]
+  files = [Path(path).name for path in _list_files_local(get_full_path(folder, subfolder, False))]
   send_telegram_message(
     '\n'.join(
       [f'*📊 Report Check Mismatch*\n▶️ {label}\n']
