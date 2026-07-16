@@ -4,3 +4,4 @@ __pycache__/
 .local/
 generic_lib.egg-info/
 /dist
+build/

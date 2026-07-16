@@ -1,5 +1,7 @@
 stages:
   - lint
+  - test
 
 include:
   - local: 'gitlab/lint.yml'
+  - local: 'gitlab/test.yml'

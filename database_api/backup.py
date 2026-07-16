@@ -85,8 +85,8 @@ def db_backup(db_url: str, server=None):
       send_telegram_message(
         '\n'.join(
           [
-            f'*📦 DB Backup Fallito*\n▶️ `{db_url}`\n',
-            f'*❌ Errore durante il backup ({"server" if server else "local"}):*',
+            f'**📦 DB Backup Fallito**\n▶️ `{db_url}`\n',
+            f'**❌ Errore durante il backup ({"server" if server else "local"}):**',
             f'`{e.stderr.strip() or e.stdout.strip() or str(e)}`',
           ]
         )
