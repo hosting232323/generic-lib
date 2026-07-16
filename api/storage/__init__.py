@@ -45,8 +45,8 @@ def folder_backup(folder_to_backup, server=None):
       send_telegram_message(
         '\n'.join(
           [
-            f'*📦 Folder Backup Fallito*\n▶️ `{folder_to_backup}`\n',
-            f'*❌ Errore durante il backup ({"server" if server else "local"}):*',
+            f'**📦 Folder Backup Fallito**\n▶️ `{folder_to_backup}`\n',
+            f'**❌ Errore durante il backup ({"server" if server else "local"}):**',
             f'`{e.stderr.strip() or e.stdout.strip() or str(e)}`',
           ]
         )
@@ -60,14 +60,14 @@ def check_mismatch(db_files, folder, label, subfolder=None):
   files = [Path(path).name for path in _list_files_local(get_full_path(folder, subfolder))]
   send_telegram_message(
     '\n'.join(
-      [f'*📊 Report Check Mismatch*\n▶️ {label}\n']
+      [f'**📊 Report Check Mismatch**\n▶️ {label}\n']
       + format_mismatch_message(
-        db_files, files, '\n*❌ File presenti solo nel DB ({}):*', '\n✔️ Nessun file solo nel DB'
+        db_files, files, '\n**❌ File presenti solo nel DB ({}):**', '\n✔️ Nessun file solo nel DB'
       )
       + format_mismatch_message(
         files,
         db_files,
-        '\n*❌ File presenti solo in storage local ({}):*',
+        '\n**❌ File presenti solo in storage local ({}):**',
         '\n✔️ Nessun file solo in storage',
       )
     )

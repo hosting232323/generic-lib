@@ -1,45 +1,51 @@
+import asyncio
 import threading
 
 from api import telegram
-from api.telegram import MAX_MESSAGE_LENGTH, MAX_TELEGRAM_TEXT, split_message
+from api.telegram import MAX_MESSAGE_LENGTH, MAX_TELEGRAM_TEXT
 
 
-def test_split_message_short_text_single_chunk():
-  assert split_message('breve') == ['breve']
+class StubBot:
+  sent = []
+
+  def __init__(self, token):
+    pass
+
+  async def send_message(self, chat_id, text, message_thread_id, parse_mode):
+    StubBot.sent.append(text)
 
 
-def test_split_message_terminates_on_oversized_code_block():
-  # Regressione: un blocco ``` più lungo di MAX_MESSAGE_LENGTH mandava split_message in loop infinito.
-  message = 'header\n```\n' + '\n'.join(f'- {i}.png' for i in range(1500)) + '\n```'
+def send_and_collect(monkeypatch, text):
+  StubBot.sent = []
+  monkeypatch.setattr(telegram, 'Bot', StubBot)
+  asyncio.run(telegram.send_message(text))
+  return StubBot.sent
 
-  chunks = split_message(message)
+
+def test_send_message_short_text_single_chunk(monkeypatch):
+  chunks = send_and_collect(monkeypatch, 'messaggio breve')
+
+  assert len(chunks) == 1
+  assert 'messaggio breve' in chunks[0]
+
+
+def test_send_message_splits_oversized_code_block(monkeypatch):
+  # Regressione: un report mismatch con un blocco ``` oltre i 4096 caratteri
+  # mandava il vecchio split_message in loop infinito (thread appeso, zero errori).
+  message = '*Report*\n```\n' + '\n'.join(f'- {i}.png' for i in range(1500)) + '\n```'
+
+  chunks = send_and_collect(monkeypatch, message)
 
   assert len(chunks) > 1
   assert all(chunks), 'nessun chunk vuoto'
   assert all(len(chunk) <= MAX_MESSAGE_LENGTH for chunk in chunks)
+  assert ''.join(chunks).count('png') == 1500
 
 
-def test_split_message_keeps_code_fences_balanced_in_every_chunk():
-  message = 'header\n```\n' + '\n'.join(f'- {i}.png' for i in range(1500)) + '\n```'
+def test_send_message_special_characters_do_not_break(monkeypatch):
+  chunks = send_and_collect(monkeypatch, '*Report* file_name (1).png [ok] `codice`')
 
-  for chunk in split_message(message):
-    assert chunk.count('```') % 2 == 0, f'blocco di codice non chiuso nel chunk: {chunk[:60]}…'
-
-
-def test_split_message_preserves_content():
-  lines = [f'- {i}.png' for i in range(1500)]
-  message = 'header\n```\n' + '\n'.join(lines) + '\n```'
-
-  joined = '\n'.join(split_message(message))
-  for line in lines:
-    assert line in joined
-
-
-def test_split_message_without_newlines_terminates():
-  chunks = split_message('x' * (MAX_MESSAGE_LENGTH * 3))
-
-  assert all(len(chunk) <= MAX_MESSAGE_LENGTH for chunk in chunks)
-  assert sum(len(chunk) for chunk in chunks) == MAX_MESSAGE_LENGTH * 3
+  assert len(chunks) == 1
 
 
 def test_send_telegram_message_truncates_oversized_text(monkeypatch):
@@ -63,19 +69,3 @@ def test_send_telegram_message_truncates_oversized_text(monkeypatch):
   assert len(sent) == 1
   assert sent[0].endswith('… messaggio troncato')
   assert len(sent[0]) <= MAX_TELEGRAM_TEXT + len('\n… messaggio troncato')
-
-
-def test_escape_md_escapes_special_characters():
-  escaped = telegram.escape_md('file_name (1).png')
-
-  assert '\\_' in escaped
-  assert '\\(' in escaped
-  assert '\\)' in escaped
-  assert '\\.' in escaped
-
-
-def test_escape_md_preserves_balanced_bold_and_code():
-  escaped = telegram.escape_md('*titolo*\n```\ncontenuto\n```')
-
-  assert escaped.startswith('*titolo*')
-  assert escaped.count('```') == 2
