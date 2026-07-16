@@ -26,6 +26,9 @@ MAX_TELEGRAM_TEXT = 5 * MAX_MESSAGE_LENGTH  # oltre questa soglia il flood contr
 
 
 async def send_message(text, topic_name=None):
+  # Un topic non mappato non deve far fallire l'invio: si ripiega sul topic di default.
+  topic_id = TELEGRAM_TOPIC.get(topic_name or PROJECT_NAME, TELEGRAM_TOPIC['default'])
+
   # min_file_lines=sys.maxsize: i blocchi di codice restano inline invece di diventare allegati
   boxes = await telegramify_markdown.telegramify(text, min_file_lines=sys.maxsize, render_mermaid=False)
   for box in boxes:
@@ -35,7 +38,7 @@ async def send_message(text, topic_name=None):
       await Bot(TELEGRAM_TOKEN).send_message(
         chat_id=CHAT_ID,
         text=chunk,
-        message_thread_id=TELEGRAM_TOPIC[topic_name] if topic_name else TELEGRAM_TOPIC[PROJECT_NAME],
+        message_thread_id=topic_id,
         parse_mode='MarkdownV2',
       )
 
