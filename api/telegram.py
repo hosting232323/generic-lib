@@ -22,14 +22,12 @@ TELEGRAM_TOPIC = {
   'generic-booking': 4294967351,
 }
 MAX_MESSAGE_LENGTH = 4096
-MAX_TELEGRAM_TEXT = 5 * MAX_MESSAGE_LENGTH  # oltre questa soglia il flood control di Telegram blocca l'invio
+MAX_TELEGRAM_TEXT = 5 * MAX_MESSAGE_LENGTH
 
 
 async def send_message(text, topic_name=None):
-  # Un topic non mappato non deve far fallire l'invio: si ripiega sul topic di default.
   topic_id = TELEGRAM_TOPIC.get(topic_name or PROJECT_NAME, TELEGRAM_TOPIC['default'])
 
-  # min_file_lines=sys.maxsize: i blocchi di codice restano inline invece di diventare allegati
   boxes = await telegramify_markdown.telegramify(text, min_file_lines=sys.maxsize, render_mermaid=False)
   for box in boxes:
     if box.content_type != telegramify_markdown.ContentTypes.TEXT:

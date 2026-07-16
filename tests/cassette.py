@@ -21,8 +21,6 @@ def cassette_path(name: str) -> Path:
 
 
 class RecordingRequest(HTTPXRequest):
-  """Inoltra le richieste all'API reale e le registra insieme alle risposte."""
-
   def __init__(self, token: str, entries: list):
     super().__init__(connect_timeout=10, read_timeout=30, write_timeout=30)
     self._token = token
@@ -42,9 +40,6 @@ class RecordingRequest(HTTPXRequest):
 
 
 class ReplayRequest(BaseRequest):
-  """Riproduce una cassetta: verifica che le richieste corrispondano a quelle registrate
-  e restituisce le risposte reali salvate, senza toccare la rete."""
-
   def __init__(self, entries: list):
     self._entries = entries
     self._index = 0
