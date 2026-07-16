@@ -7,5 +7,5 @@ test_backend:
   rules:
     - if: '$CI_COMMIT_BRANCH != "main"'
   script:
-    - pip install . pytest
+    - pip install .[dev]
     - pytest tests -q
