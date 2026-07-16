@@ -1,6 +1,51 @@
 [build-system]
-requires = ["setuptools>=42", "wheel"]
+requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "generic_lib"
+version = "4.9.0"
+authors = [{ name = "GioVanni", email = "colasanto.giovanni.inf@gmail.com" }]
+dependencies = [
+  "SQLAlchemy",
+  "alembic",
+  "requests",
+  "python-dotenv",
+  "flask",
+  "flask_cors",
+  "tqdm",
+  "PyJWT",
+  "boto3",
+  "google-auth",
+  "stripe",
+  "python-telegram-bot",
+  "telegramify-markdown>=1.2.0",
+  "pytz",
+  "tzdata",
+]
+
+[project.optional-dependencies]
+unix = ["psycopg2-binary"]
+win = ["psycopg2"]
+dev = ["pytest", "build"]
+
+[project.scripts]
+db_export = "console_scripts:db_export"
+db_import = "console_scripts:db_import"
+setup_project = "console_scripts:setup_project"
+
+[tool.setuptools]
+include-package-data = true
+packages = [
+  "api",
+  "api.log",
+  "api.users",
+  "api.email",
+  "api.payment",
+  "api.storage",
+  "database_api",
+  "console_scripts",
+]
 
 [tool.ruff]
 line-length = 120

@@ -1,0 +1,11 @@
+test_backend:
+  stage: test
+  image: python:3.11
+  interruptible: true
+  tags:
+    - test
+  rules:
+    - if: '$CI_COMMIT_BRANCH != "main"'
+  script:
+    - pip install .[dev]
+    - pytest tests -q

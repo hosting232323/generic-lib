@@ -7,13 +7,20 @@ from database_api.operations import db_session_decorator
 from ..settings import RESTIC_PASSWORD, BACKUP_FOLDER, SERVER_NAME, API_PREFIX
 
 
-def format_mismatch_message(first_list: list, second_list: list, success_text: str, failure_text: str):
-  mismatch_lines = [f'- {item}' for item in sorted(set(first_list) - set(second_list))]
+MAX_MISMATCH_LINES = 50
 
-  if not mismatch_lines:
+
+def format_mismatch_message(first_list: list, second_list: list, success_text: str, failure_text: str):
+  mismatch = sorted(set(first_list) - set(second_list))
+
+  if not mismatch:
     return [failure_text]
 
-  return [success_text.format(len(mismatch_lines)), '```'] + mismatch_lines + ['```']
+  mismatch_lines = [f'- {item}' for item in mismatch[:MAX_MISMATCH_LINES]]
+  if len(mismatch) > MAX_MISMATCH_LINES:
+    mismatch_lines.append(f'- … e altri {len(mismatch) - MAX_MISMATCH_LINES} file')
+
+  return [success_text.format(len(mismatch)), '```'] + mismatch_lines + ['```']
 
 
 def set_backup_env():
