@@ -20,6 +20,7 @@ TELEGRAM_TOPIC = {
   'generic-booking': 4294967351,
 }
 MAX_MESSAGE_LENGTH = 4096
+MAX_TELEGRAM_TEXT = 5 * MAX_MESSAGE_LENGTH  # oltre questa soglia il flood control di Telegram blocca l'invio
 
 
 def escape_md(text: str) -> str:
@@ -102,6 +103,9 @@ def send_telegram_error(trace: str, endpoint: bool = True):
 
 
 def send_telegram_message(text, topic_name=None):
+  if len(text) > MAX_TELEGRAM_TEXT:
+    text = text[:MAX_TELEGRAM_TEXT] + '\n… messaggio troncato'
+
   def run():
     try:
       asyncio.run(send_message(text, topic_name=topic_name))
@@ -138,23 +142,22 @@ def split_message(text: str) -> list[str]:
     return [text]
 
   chunks = []
-  while text:
-    if len(text) <= MAX_MESSAGE_LENGTH:
-      chunks.append(text)
-      break
-
-    split_at = text.rfind('\n', 0, MAX_MESSAGE_LENGTH)
-    if split_at <= 0:
-      split_at = MAX_MESSAGE_LENGTH
+  limit = MAX_MESSAGE_LENGTH - 4  # margine per chiudere un blocco di codice a fine chunk
+  while len(text) > MAX_MESSAGE_LENGTH:
+    split_at = text.rfind('\n', 0, limit)
+    if split_at < limit // 2:
+      split_at = limit
 
     segment = text[:split_at]
+    remainder = text[split_at:].lstrip('\n')
     if segment.count('```') % 2 == 1:
-      block_start = segment.rfind('```')
-      split_at = text.rfind('\n', 0, block_start)
-      if split_at <= 0:
-        split_at = block_start
+      segment += '\n```'
+      remainder = '```\n' + remainder
 
-    chunks.append(text[:split_at])
-    text = text[split_at:].lstrip('\n')
+    chunks.append(segment)
+    text = remainder
+
+  if text:
+    chunks.append(text)
 
   return chunks
