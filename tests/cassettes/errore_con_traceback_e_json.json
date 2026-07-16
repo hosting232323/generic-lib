@@ -1,0 +1,13 @@
+[
+  {
+    "url": "https://api.telegram.org/bot123456:TEST-TOKEN/sendMessage",
+    "params": {
+      "chat_id": -1003410500390,
+      "text": "🧪 TEST lib\n*Errore:*\n```\nTraceback (most recent call last):\n  File \"/app/src/end_points/rae/__init__.py\", line 12\n    raise ValueError('FIR gia_ presente [id=3]')\n```\n*Request Data:*\n```json\n{\"path\": \"/api/checks\", \"method\": \"GET\"}\n```",
+      "message_thread_id": 4294967440,
+      "parse_mode": "MarkdownV2"
+    },
+    "status": 200,
+    "body": "eyJvayI6dHJ1ZSwicmVzdWx0Ijp7Im1lc3NhZ2VfaWQiOjI0OTEsImZyb20iOnsiaWQiOjc5NTM3NjI1NDMsImlzX2JvdCI6dHJ1ZSwiZmlyc3RfbmFtZSI6IlRlbGVncmFtIEFsZXJ0cyIsInVzZXJuYW1lIjoiRmFzdHNpdGVfQWxlcnRzX0JvdCJ9LCJjaGF0Ijp7ImlkIjotMTAwMzQxMDUwMDM5MCwidGl0bGUiOiJFcnJvcmkgRmFzdFNpdGUiLCJpc19mb3J1bSI6dHJ1ZSwidHlwZSI6InN1cGVyZ3JvdXAifSwiZGF0ZSI6MTc4NDE5MjUzOCwibWVzc2FnZV90aHJlYWRfaWQiOjE0NCwicmVwbHlfdG9fbWVzc2FnZSI6eyJtZXNzYWdlX2lkIjoxNDQsImZyb20iOnsiaWQiOjE3NDk0NzkzNiwiaXNfYm90IjpmYWxzZSwiZmlyc3RfbmFtZSI6IkdpdXNlcHBlIiwidXNlcm5hbWUiOiJjbF9jYXNzYW5lbGxpIiwibGFuZ3VhZ2VfY29kZSI6Iml0In0sImNoYXQiOnsiaWQiOi0xMDAzNDEwNTAwMzkwLCJ0aXRsZSI6IkVycm9yaSBGYXN0U2l0ZSIsImlzX2ZvcnVtIjp0cnVlLCJ0eXBlIjoic3VwZXJncm91cCJ9LCJkYXRlIjoxNzY2ODQ5MzY0LCJtZXNzYWdlX3RocmVhZF9pZCI6MTQ0LCJmb3J1bV90b3BpY19jcmVhdGVkIjp7Im5hbWUiOiJkZWZhdWx0IiwiaWNvbl9jb2xvciI6NzMyMjA5Nn0sImlzX3RvcGljX21lc3NhZ2UiOnRydWV9LCJ0ZXh0IjoiXHVkODNlXHVkZGVhIFRFU1QgbGliXG5FcnJvcmU6XG5UcmFjZWJhY2sgKG1vc3QgcmVjZW50IGNhbGwgbGFzdCk6XG4gIEZpbGUgXCIvYXBwL3NyYy9lbmRfcG9pbnRzL3JhZS9fX2luaXRfXy5weVwiLCBsaW5lIDEyXG4gICAgcmFpc2UgVmFsdWVFcnJvcignRklSIGdpYV8gcHJlc2VudGUgW2lkPTNdJylcblxuUmVxdWVzdCBEYXRhOlxue1wicGF0aFwiOiBcIi9hcGkvY2hlY2tzXCIsIFwibWV0aG9kXCI6IFwiR0VUXCJ9IiwiZW50aXRpZXMiOlt7Im9mZnNldCI6MTIsImxlbmd0aCI6NywidHlwZSI6ImJvbGQifSx7Im9mZnNldCI6MjAsImxlbmd0aCI6MTM4LCJ0eXBlIjoicHJlIiwibGFuZ3VhZ2UiOiJweXRob24ifSx7Im9mZnNldCI6MTU5LCJsZW5ndGgiOjEzLCJ0eXBlIjoiYm9sZCJ9LHsib2Zmc2V0IjoxNzMsImxlbmd0aCI6NDAsInR5cGUiOiJwcmUiLCJsYW5ndWFnZSI6Impzb24ifV0sImlzX3RvcGljX21lc3NhZ2UiOnRydWV9fQ=="
+  }
+]

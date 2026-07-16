@@ -1,0 +1,13 @@
+[
+  {
+    "url": "https://api.telegram.org/bot123456:TEST-TOKEN/sendMessage",
+    "params": {
+      "chat_id": -1003410500390,
+      "text": "🧪 TEST lib: messaggio semplice",
+      "message_thread_id": 4294967440,
+      "parse_mode": "MarkdownV2"
+    },
+    "status": 200,
+    "body": "eyJvayI6dHJ1ZSwicmVzdWx0Ijp7Im1lc3NhZ2VfaWQiOjI0ODIsImZyb20iOnsiaWQiOjc5NTM3NjI1NDMsImlzX2JvdCI6dHJ1ZSwiZmlyc3RfbmFtZSI6IlRlbGVncmFtIEFsZXJ0cyIsInVzZXJuYW1lIjoiRmFzdHNpdGVfQWxlcnRzX0JvdCJ9LCJjaGF0Ijp7ImlkIjotMTAwMzQxMDUwMDM5MCwidGl0bGUiOiJFcnJvcmkgRmFzdFNpdGUiLCJpc19mb3J1bSI6dHJ1ZSwidHlwZSI6InN1cGVyZ3JvdXAifSwiZGF0ZSI6MTc4NDE5MjUyNSwibWVzc2FnZV90aHJlYWRfaWQiOjE0NCwicmVwbHlfdG9fbWVzc2FnZSI6eyJtZXNzYWdlX2lkIjoxNDQsImZyb20iOnsiaWQiOjE3NDk0NzkzNiwiaXNfYm90IjpmYWxzZSwiZmlyc3RfbmFtZSI6IkdpdXNlcHBlIiwidXNlcm5hbWUiOiJjbF9jYXNzYW5lbGxpIiwibGFuZ3VhZ2VfY29kZSI6Iml0In0sImNoYXQiOnsiaWQiOi0xMDAzNDEwNTAwMzkwLCJ0aXRsZSI6IkVycm9yaSBGYXN0U2l0ZSIsImlzX2ZvcnVtIjp0cnVlLCJ0eXBlIjoic3VwZXJncm91cCJ9LCJkYXRlIjoxNzY2ODQ5MzY0LCJtZXNzYWdlX3RocmVhZF9pZCI6MTQ0LCJmb3J1bV90b3BpY19jcmVhdGVkIjp7Im5hbWUiOiJkZWZhdWx0IiwiaWNvbl9jb2xvciI6NzMyMjA5Nn0sImlzX3RvcGljX21lc3NhZ2UiOnRydWV9LCJ0ZXh0IjoiXHVkODNlXHVkZGVhIFRFU1QgbGliOiBtZXNzYWdnaW8gc2VtcGxpY2UiLCJpc190b3BpY19tZXNzYWdlIjp0cnVlfX0="
+  }
+]
