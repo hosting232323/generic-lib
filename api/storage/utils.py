@@ -1,4 +1,5 @@
 import os
+import re
 from flask import request
 from sqlalchemy import text
 from sqlalchemy.orm import Session as session_type
@@ -8,6 +9,16 @@ from ..settings import RESTIC_PASSWORD, BACKUP_FOLDER, SERVER_NAME, API_PREFIX
 
 
 MAX_MISMATCH_LINES = 50
+
+MIME_TYPE_EXTENSIONS = {
+  'application/pdf': '.pdf',
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+  'video/mp4': '.mp4',
+}
+
+_SQL_IDENTIFIER = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
 
 
 def format_mismatch_message(first_list: list, second_list: list, success_text: str, failure_text: str):
@@ -39,24 +50,27 @@ def set_backup_env():
 
 
 @db_session_decorator(commit=True)
-def guess_next_id(model: str, session: session_type = None) -> int:
-  return session.execute(text(f"SELECT nextval('{model}_id_seq')")).scalar()
+def guess_next_id(model, session: session_type = None) -> int:
+  table_name = getattr(model, '__tablename__', model)
+  if not isinstance(table_name, str) or not _SQL_IDENTIFIER.fullmatch(table_name):
+    raise ValueError('model deve essere un nome tabella SQL valido o un model SQLAlchemy')
+
+  return session.execute(text(f"SELECT nextval('{table_name}_id_seq')")).scalar()
 
 
 def guess_extension(mime_type: str) -> str:
-  if mime_type == 'image/jpeg':
-    return '.jpg'
-  if mime_type == 'image/png':
-    return '.png'
-  if mime_type == 'image/webp':
-    return '.webp'
-  if mime_type == 'video/mp4':
-    return '.mp4'
-  if mime_type == 'application/pdf':
-    return '.pdf'
-
-  raise ValueError('Mime type non supportato')
+  normalized_mime_type = mime_type.partition(';')[0].strip().lower()
+  try:
+    return MIME_TYPE_EXTENSIONS[normalized_mime_type]
+  except KeyError as error:
+    raise ValueError(f'Mime type non supportato: {mime_type}') from error
 
 
 def get_base_file_path(path):
-  return f'{request.scheme}://{request.host}{f"/{API_PREFIX}" if API_PREFIX else ""}/{path}/'
+  components = [request.host_url.rstrip('/')]
+  if API_PREFIX:
+    components.append(API_PREFIX.strip('/'))
+  if path:
+    components.append(str(path).strip('/'))
+
+  return '/'.join(components) + '/'

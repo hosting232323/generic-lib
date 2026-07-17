@@ -1,4 +1,6 @@
+from functools import wraps
 import os
+import shlex
 import shutil
 import tempfile
 import subprocess
@@ -7,24 +9,24 @@ from .utils import set_backup_env
 from ..settings import BACKUP_SSH_CONFIG, BACKUP_FOLDER, SERVER_NAME, BACKUP_DAYS
 
 
-def storage_decorator(func):
+def _requires_server_config(func):
+  @wraps(func)
   def wrapper(*args, **kwargs):
     if not BACKUP_SSH_CONFIG:
       raise ValueError('BACKUP_SSH_CONFIG non configurato')
 
     return func(*args, **kwargs)
 
-  wrapper.__name__ = func.__name__
   return wrapper
 
 
-@storage_decorator
+@_requires_server_config
 def _upload_file_server(content, full_path):
   subprocess.run(
     [
       'ssh',
       f'{BACKUP_SSH_CONFIG}',
-      f'mkdir -p "{os.path.dirname(full_path)}"',
+      f'mkdir -p -- {shlex.quote(os.path.dirname(full_path))}',
     ],
     check=True,
     capture_output=True,
@@ -44,7 +46,7 @@ def _upload_file_server(content, full_path):
         '--partial',
         '--append-verify',
         tmp_path,
-        f'{BACKUP_SSH_CONFIG}:{full_path}',
+        f'{BACKUP_SSH_CONFIG}:{shlex.quote(full_path)}',
       ],
       check=True,
       capture_output=True,
@@ -58,13 +60,13 @@ def _upload_file_server(content, full_path):
   return full_path
 
 
-@storage_decorator
+@_requires_server_config
 def _delete_file_server(full_path):
   subprocess.run(
     [
       'ssh',
       f'{BACKUP_SSH_CONFIG}',
-      f'rm "{full_path}"',
+      f'rm -- {shlex.quote(full_path)}',
     ],
     check=True,
     capture_output=True,
@@ -72,26 +74,29 @@ def _delete_file_server(full_path):
   )
 
 
-@storage_decorator
+@_requires_server_config
 def _list_files_server(full_path):
-  return [
-    os.path.join(full_path, file)
-    for file in subprocess.run(
-      [
-        'ssh',
-        f'{BACKUP_SSH_CONFIG}',
-        f'find "{full_path}" -maxdepth 1 -type f -printf "%f\\n"',
-      ],
-      capture_output=True,
-      text=True,
-      check=True,
-    )
-    .stdout.strip()
-    .splitlines()
-  ]
+  quoted_path = shlex.quote(full_path)
+  return sorted(
+    [
+      os.path.join(full_path, file)
+      for file in subprocess.run(
+        [
+          'ssh',
+          f'{BACKUP_SSH_CONFIG}',
+          f'if [ -d {quoted_path} ]; then find {quoted_path} -maxdepth 1 -type f -printf "%f\\n"; fi',
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+      )
+      .stdout.strip()
+      .splitlines()
+    ]
+  )
 
 
-@storage_decorator
+@_requires_server_config
 def _folder_backup_server(folder_to_backup):
   subprocess.run(
     [
@@ -110,7 +115,7 @@ def _folder_backup_server(folder_to_backup):
   )
 
 
-@storage_decorator
+@_requires_server_config
 def _cleanup_folder_backups_server():
   subprocess.run(
     [

@@ -41,3 +41,26 @@ def test_check_mismatch_compares_basenames_both_directions(tmp_path, monkeypatch
   assert '- solo-db.png' in messages[0]
   assert '- orfano.png' in messages[0]
   assert '- a.png' not in messages[0]
+
+
+def test_check_mismatch_compares_normalized_relative_paths_recursively(tmp_path, monkeypatch):
+  media = tmp_path / 'department' / 'device'
+  os.makedirs(media)
+  (media / 'clip.mp4').write_bytes(b'x')
+  (media / 'storage-only.mp4').write_bytes(b'x')
+
+  messages = []
+  monkeypatch.setattr(storage, 'send_telegram_message', lambda text, topic_name=None: messages.append(text))
+
+  check_mismatch(
+    ['\\department\\device\\clip.mp4', '/department/device/db-only.mp4'],
+    str(tmp_path),
+    'Media',
+    recursive=True,
+    ignore_dev=True,
+  )
+
+  assert len(messages) == 1
+  assert '- department/device/db-only.mp4' in messages[0]
+  assert '- department/device/storage-only.mp4' in messages[0]
+  assert '- department/device/clip.mp4' not in messages[0]

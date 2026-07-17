@@ -49,10 +49,24 @@ from api import send_mail
 
 # User
 from api import register_user, login, ask_change_password, change_password, session_token_decorator
-
-# Storage
-from api import download_file, upload_file  # da deprecare?
+# Storage: importare sempre dal package pubblico
+from api.storage import (
+  check_mismatch,
+  delete_file,
+  folder_backup,
+  format_mismatch_message,
+  get_all_filenames,
+  get_base_file_path,
+  get_full_path,
+  guess_extension,
+  guess_next_id,
+  upload_file,
+)
 ```
+
+Il parametro `server` delle operazioni file accetta `None`/`False`/`"local"`
+per lo storage locale e `True`/`"server"` per quello remoto. I moduli
+`api.storage.local`, `api.storage.server` e `api.storage.utils` sono dettagli interni.
 
 ## Database api
 
