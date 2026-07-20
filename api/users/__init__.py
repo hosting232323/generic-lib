@@ -106,15 +106,15 @@ def create_jwt_token(value: str, token_field: str = 'email'):
 
 
 def build_session_authentication(log_folder, get_user=get_user_by_email, token_field='email', refresh=True):
-  def flask_session_authentication(roles=None):
+  def flask_session_authentication(roles=None, allow_query_token=False):
     if callable(roles):
-      return _decorate(roles, None)
-    return lambda func: _decorate(func, roles)
+      return _decorate(roles, None, False)
+    return lambda func: _decorate(func, roles, allow_query_token)
 
-  def _decorate(func, roles):
+  def _decorate(func, roles, allow_query_token):
     @wraps(func)
     def wrapper(*args, **kwargs):
-      auth_header = request.headers.get('Authorization')
+      auth_header = request.args.get('token') if allow_query_token else request.headers.get('Authorization')
       if not auth_header or auth_header == 'null':
         return {'status': 'session', 'message': 'Token assente'}
 
