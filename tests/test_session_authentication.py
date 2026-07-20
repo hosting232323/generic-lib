@@ -3,15 +3,15 @@
 Di default il decorator legge il token JWT dall'header Authorization. Alcune
 richieste pero' quell'header non possono proprio inviarlo: sono quelle
 generate dal browser per un <img>, un <video> o un link di download, dove
-l'URL e' l'unico canale disponibile. Per questi casi c'e' `token_from_query`,
-che fa leggere il token dalla query string (`?token=...`).
+l'URL e' l'unico canale disponibile. Per questi casi c'e' `allow_query_token`,
+che fa leggere il token dalla query string, sempre sotto il nome `token`.
 
 L'opzione **sostituisce** la sorgente, non la affianca: un endpoint dichiara
 da dove arriva il suo token, e legge solo da li'. La scelta e' voluta — un
 endpoint nato per un <img> ha un unico canale possibile, e due canali
 significherebbero due percorsi da ragionare e una regola di precedenza da
-ricordare. Da qui il nome: non "consenti anche", ma "il token arriva dalla
-query".
+ricordare. Attenzione quindi a leggere il nome come "consenti anche
+l'header": abilitare l'opzione esclude l'header, non lo affianca.
 
 Il rovescio della medaglia, da tenere presente quando si abilita: un token in
 query string finisce nei log d'accesso del server, mentre un header no. Va
@@ -20,10 +20,9 @@ quindi dichiarata solo dove il tipo di richiesta la impone.
 Le regole che ne derivano, una per test:
 
 - endpoint di default: legge l'header, e ignora la query anche se valida;
-- endpoint con token_from_query: legge la query, e ignora l'header anche se
+- endpoint con allow_query_token: legge la query, e ignora l'header anche se
   valido (nemmeno come ripiego);
 - l'uso "nudo" (@session_auth senza parentesi) resta sull'header;
-- il nome del parametro e' configurabile alla costruzione (query_token_param);
 - ruoli, refresh del token e messaggi d'errore restano quelli di sempre.
 """
 
@@ -54,17 +53,17 @@ def build_app(**auth_kwargs):
     return {'status': 'ok', 'who': user.email}
 
   @app.route('/query-on')
-  @session_auth(token_from_query=True)
+  @session_auth(allow_query_token=True)
   def query_on(user):
     return {'status': 'ok', 'who': user.email}
 
   @app.route('/query-on-admin')
-  @session_auth(roles=['admin'], token_from_query=True)
+  @session_auth(roles=['admin'], allow_query_token=True)
   def query_on_admin(user):
     return {'status': 'ok', 'who': user.email}
 
   @app.route('/query-on-superadmin')
-  @session_auth(roles=['superadmin'], token_from_query=True)
+  @session_auth(roles=['superadmin'], allow_query_token=True)
   def query_on_superadmin(user):
     return {'status': 'ok', 'who': user.email}
 
@@ -102,7 +101,7 @@ def test_query_token_accepted_when_enabled(client, token):
 
 
 def test_header_ignored_when_token_comes_from_query(client, token):
-  # Sorgente esclusiva: su un endpoint con token_from_query un header valido,
+  # Sorgente esclusiva: su un endpoint con allow_query_token un header valido,
   # da solo, non autentica — il token deve stare nella query.
   r = client.get('/query-on', headers={'Authorization': token})
   assert r.get_json() == {'status': 'session', 'message': 'Token assente'}
@@ -131,13 +130,6 @@ def test_roles_enforced_with_query_token(client, token):
     'status': 'session',
     'message': 'Ruolo non autorizzato',
   }
-
-
-def test_custom_query_param_name(token):
-  client = build_app(query_token_param='access_token')
-  assert client.get(f'/query-on?access_token={token}').get_json()['status'] == 'ok'
-  # Il nome vecchio non e' piu' riconosciuto.
-  assert client.get(f'/query-on?token={token}').get_json() == {'status': 'session', 'message': 'Token assente'}
 
 
 def test_query_token_result_is_refreshed(client, token):

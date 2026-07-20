@@ -105,23 +105,21 @@ def create_jwt_token(value: str, token_field: str = 'email'):
   )
 
 
-def build_session_authentication(
-  log_folder, get_user=get_user_by_email, token_field='email', refresh=True, query_token_param='token'
-):
-  def flask_session_authentication(roles=None, token_from_query=False):
+def build_session_authentication(log_folder, get_user=get_user_by_email, token_field='email', refresh=True):
+  def flask_session_authentication(roles=None, allow_query_token=False):
     if callable(roles):
       return _decorate(roles, None, False)
-    return lambda func: _decorate(func, roles, token_from_query)
+    return lambda func: _decorate(func, roles, allow_query_token)
 
-  def _decorate(func, roles, token_from_query):
+  def _decorate(func, roles, allow_query_token):
     @wraps(func)
     def wrapper(*args, **kwargs):
-      token = request.args.get(query_token_param) if token_from_query else request.headers.get('Authorization')
-      if not token or token == 'null':
+      auth_header = request.args.get('token') if allow_query_token else request.headers.get('Authorization')
+      if not auth_header or auth_header == 'null':
         return {'status': 'session', 'message': 'Token assente'}
 
       try:
-        user = get_user(jwt.decode(token, DECODE_JWT_TOKEN, algorithms=['HS256'])[token_field])
+        user = get_user(jwt.decode(auth_header, DECODE_JWT_TOKEN, algorithms=['HS256'])[token_field])
         if not user:
           return {'status': 'session', 'message': 'Utente non trovato'}
 
