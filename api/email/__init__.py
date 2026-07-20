@@ -10,6 +10,12 @@ from .sender import EMAIL_SENDER
 from ..telegram import send_telegram_message
 
 
+SMTP_PORT = 587
+RETRY_BACKOFF = 2.0
+SMTP_MAX_RETRIES = 3
+SMTP_SERVER = 'smtp-relay.brevo.com'
+
+
 def _build_message(receiver_email: str, body, subject: str, attachments: list = None) -> MIMEMultipart:
   message = MIMEMultipart('alternative')
   message['From'] = formataddr((EMAIL_SENDER['name'], EMAIL_SENDER['address']))
@@ -34,7 +40,7 @@ def _build_message(receiver_email: str, body, subject: str, attachments: list = 
 
 
 def _connect() -> smtplib.SMTP:
-  server = smtplib.SMTP(EMAIL_SENDER['smtp_server'], EMAIL_SENDER['smtp_port'])
+  server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
   server.ehlo()
   server.starttls()
   server.ehlo()
@@ -51,8 +57,8 @@ def send_email(receiver_email: str, body, subject: str, attachments: list = None
   message = _build_message(receiver_email, body, subject, attachments)
   raw = message.as_string()
 
-  attempts = max(1, EMAIL_SENDER['max_retries'])
-  backoff = EMAIL_SENDER['retry_backoff']
+  attempts = max(1, SMTP_MAX_RETRIES)
+  backoff = RETRY_BACKOFF
   last_error = None
 
   for attempt in range(1, attempts + 1):
