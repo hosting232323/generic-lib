@@ -5,9 +5,8 @@ Provides functions for restricted users to list and download their backups.
 
 import os
 import subprocess
-from pathlib import Path
 
-from .server import storage_decorator, get_full_path, set_backup_env
+from .server import storage_decorator
 from ..settings import BACKUP_SSH_CONFIG, BACKUP_FOLDER
 
 
