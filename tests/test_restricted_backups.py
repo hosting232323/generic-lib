@@ -3,14 +3,13 @@
 import pytest
 from unittest.mock import Mock, patch
 
-# Mock the storage decorators and settings
-with patch('api.storage.restricted_users.BACKUP_SSH_CONFIG', 'test-config'):
-  from api.storage.restricted_users import (
-    list_user_backups,
-    get_user_backup_file,
-    get_user_backup_file_size,
-    get_user_backup_info,
-  )
+# BACKUP_SSH_CONFIG e BACKUP_FOLDER sono impostati in conftest.py: api.settings li legge a import-time.
+from api.storage.restricted_users import (
+  list_user_backups,
+  get_user_backup_file,
+  get_user_backup_file_size,
+  get_user_backup_info,
+)
 
 
 class TestRestrictedUserBackups:
