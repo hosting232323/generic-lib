@@ -7,7 +7,6 @@ from database_api.backup import data_export, data_import
 from api.storage.restricted_users import (
   list_user_backups,
   get_user_backup_file,
-  get_user_backup_file_size,
   get_user_backup_info,
 )
 
@@ -58,8 +57,8 @@ def backup_list():
   subfolder = sys.argv[2] if len(sys.argv) > 2 else None
 
   try:
-    info = get_user_backup_info(username)
-    print(json.dumps(info, indent=2))  # noqa: T201
+    files = list_user_backups(username, subfolder)
+    print(json.dumps(files, indent=2))  # noqa: T201
   except Exception as e:
     print(f'Error listing backups for {username}: {e}')  # noqa: T201
     sys.exit(1)

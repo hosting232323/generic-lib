@@ -46,11 +46,7 @@ def list_user_backups(username: str, subfolder: str = None) -> list:
     if result.returncode != 0:
       return []
 
-    files = [
-      os.path.join(user_backup_path, filename)
-      for filename in result.stdout.strip().splitlines()
-      if filename
-    ]
+    files = [os.path.join(user_backup_path, filename) for filename in result.stdout.strip().splitlines() if filename]
     return sorted(files)
 
   except subprocess.TimeoutExpired:
@@ -158,12 +154,14 @@ def get_user_backup_info(username: str) -> dict:
     filename = os.path.basename(file_path)
     size = get_user_backup_file_size(username, filename)
     total_size += size
-    file_info.append({
-      'filename': filename,
-      'path': file_path,
-      'size': size,
-      'size_mb': round(size / (1024 * 1024), 2),
-    })
+    file_info.append(
+      {
+        'filename': filename,
+        'path': file_path,
+        'size': size,
+        'size_mb': round(size / (1024 * 1024), 2),
+      }
+    )
 
   return {
     'username': username,

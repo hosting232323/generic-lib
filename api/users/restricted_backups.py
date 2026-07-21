@@ -3,7 +3,7 @@ API endpoints for managing restricted user backups.
 Provides read-only access for users to view and download their backups.
 """
 
-from flask import Blueprint, jsonify, send_file, abort
+from flask import Blueprint, jsonify, send_file
 from functools import wraps
 from io import BytesIO
 
@@ -18,14 +18,17 @@ restricted_backups_bp = Blueprint('restricted_backups', __name__, url_prefix='/a
 
 def require_username(f):
   """Decorator to ensure username is provided in query params."""
+
   @wraps(f)
   def decorated_function(*args, **kwargs):
     from flask import request
+
     username = request.args.get('username')
     if not username:
       return jsonify({'error': 'username parameter is required'}), 400
     # In a real app, verify the user is authenticated and can access this username
     return f(username=username, *args, **kwargs)
+
   return decorated_function
 
 
@@ -40,13 +43,16 @@ def list_backups(username):
   """
   try:
     from flask import request
+
     subfolder = request.args.get('subfolder')
     files = list_user_backups(username, subfolder)
-    return jsonify({
-      'username': username,
-      'files': files,
-      'count': len(files),
-    })
+    return jsonify(
+      {
+        'username': username,
+        'files': files,
+        'count': len(files),
+      }
+    )
   except ValueError as e:
     return jsonify({'error': str(e)}), 400
   except Exception as e:
@@ -81,6 +87,7 @@ def download_backup(username):
   """
   try:
     from flask import request
+
     filename = request.args.get('filename')
     if not filename:
       return jsonify({'error': 'filename parameter is required'}), 400

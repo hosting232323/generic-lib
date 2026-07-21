@@ -1,8 +1,7 @@
 """Tests for restricted user backup functionality."""
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from io import BytesIO
+from unittest.mock import Mock, patch
 
 # Mock the storage decorators and settings
 with patch('api.storage.restricted_users.BACKUP_SSH_CONFIG', 'test-config'):
@@ -54,6 +53,10 @@ class TestRestrictedUserBackups:
     # Verify the path includes the subfolder
     call_args = mock_run.call_args[0][0]
     assert 'archived' in ' '.join(call_args)
+
+    assert len(backups) == 1
+    assert 'archived' in backups[0]
+    assert backups[0].endswith('sub_backup_1.tar.gz')
 
   def test_get_user_backup_file_invalid_filename(self):
     """Test that directory traversal attempts are blocked."""
@@ -194,9 +197,7 @@ class TestRestrictedBackupsAPI:
     """Test /download endpoint with valid params."""
     mock_download.return_value = b'test backup content'
 
-    response = client.get(
-      '/api/restricted-backups/download?username=test_user&filename=backup.tar.gz'
-    )
+    response = client.get('/api/restricted-backups/download?username=test_user&filename=backup.tar.gz')
     assert response.status_code == 200
     assert response.get_data() == b'test backup content'
 
@@ -205,9 +206,7 @@ class TestRestrictedBackupsAPI:
     """Test /download endpoint when file not found."""
     mock_download.side_effect = FileNotFoundError('File not found')
 
-    response = client.get(
-      '/api/restricted-backups/download?username=test_user&filename=nonexistent.tar.gz'
-    )
+    response = client.get('/api/restricted-backups/download?username=test_user&filename=nonexistent.tar.gz')
     assert response.status_code == 404
 
 
