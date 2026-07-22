@@ -16,8 +16,8 @@ SMTP_MAX_RETRIES = 3
 SMTP_SERVER = 'smtp-relay.brevo.com'
 
 
-def send_email(receiver_email: str, body, subject: str, attachments: list = None) -> bool:
-  message = _build_message(receiver_email, body, subject, attachments)
+def send_email(receiver_email: str, body, subject: str, attachments: list = None, signature: dict | str = None) -> bool:
+  message = _build_message(receiver_email, body, subject, attachments, signature)
   raw = message.as_string()
 
   attempts = max(1, SMTP_MAX_RETRIES)
@@ -37,17 +37,29 @@ def send_email(receiver_email: str, body, subject: str, attachments: list = None
   return False
 
 
-def _build_message(receiver_email: str, body, subject: str, attachments: list = None) -> MIMEMultipart:
+def _build_message(receiver_email: str, body, subject: str, attachments: list = None, signature: dict | str = None) -> MIMEMultipart:
   message = MIMEMultipart('alternative')
   message['From'] = formataddr((EMAIL_SENDER['name'], EMAIL_SENDER['address']))
   message['To'] = receiver_email
   message['Subject'] = subject
 
+  sig_text = ""
+  sig_html = ""
+  if signature:
+    if isinstance(signature, dict):
+      sig_text = signature.get('text', '')
+      sig_html = signature.get('html', '')
+    elif isinstance(signature, str):
+      sig_text = signature
+
   if isinstance(body, dict) and 'text' in body and 'html' in body:
-    message.attach(MIMEText(body['text'], 'plain'))
-    message.attach(MIMEText(body['html'], 'html'))
+    body_text = body['text'] + (f"\n\n{sig_text}" if sig_text else "")
+    body_html = body['html'] + (f"<br><br>{sig_html}" if sig_html else "")
+    message.attach(MIMEText(body_text, 'plain'))
+    message.attach(MIMEText(body_html, 'html'))
   elif isinstance(body, str):
-    message.attach(MIMEText(body, 'plain'))
+    body_text = body + (f"\n\n{sig_text}" if sig_text else "")
+    message.attach(MIMEText(body_text, 'plain'))
   else:
     raise ValueError('Il corpo dell\'email deve essere un dizionario con le chiavi "text" e "html" o una stringa')
 
