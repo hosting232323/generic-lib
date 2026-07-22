@@ -60,7 +60,7 @@ class SessionWithStorage:
     )
     return get_full_path(folder, subfolder, ignore_dev, filename)
 
-  def delete(self, filename: str, folder: str, *, server=None, subfolder=None, ignore_dev=None):
+  def delete_file(self, filename: str, folder: str, *, server=None, subfolder=None, ignore_dev=None):
     self._deletes.append(
       {
         'filename': filename,
