@@ -82,7 +82,3 @@ def get_full_path(folder, subfolder=False, ignore_dev=False, filename=False):
     folder = os.path.join(folder, subfolder)
 
   return os.path.join(folder, filename) if filename else folder
-
-
-# Importato in coda per evitare cicli: session.py importa da questo modulo.
-from .session import SessionWithStorage  # noqa: E402,F401

@@ -11,14 +11,6 @@ logger = logging.getLogger(__name__)
 
 
 class SessionWithStorage:
-  """Coordina una sessione database con la scrittura dei file.
-
-  I file non vengono scritti sullo storage finché il commit del database non è
-  andato a buon fine: l'upload viene messo in stage in un file temporaneo e
-  pubblicato solo dopo il commit, così un fallimento SQL non lascia file orfani.
-  Anche le delete vengono eseguite solo dopo il commit, così un rollback non
-  cancella file ancora referenziati dal database.
-  """
 
   def __init__(self):
     self._session_context = None
@@ -97,7 +89,6 @@ class SessionWithStorage:
         with open(staged_path, 'rb') as content:
           upload_file(content, **file_data)
       except Exception:
-        # Il commit è già avvenuto: logghiamo così il check_mismatch lo segnala.
         logger.exception('Impossibile pubblicare il file dopo il commit: %s', file_data['filename'])
       finally:
         self._remove_staged(staged_path)
