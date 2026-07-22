@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 
 
 class SessionWithStorage:
-
   def __init__(self):
     self._session_context = None
     self._session = None
