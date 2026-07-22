@@ -33,7 +33,7 @@ def send_email(receiver_email: str, body, subject: str, attachments: list = None
       if attempt < attempts:
         time.sleep(backoff * attempt)
 
-  send_telegram_message(f'❌ *Errore invio mail a* `{receiver_email}`\n*Subject:* {subject}\n```\n{last_error}\n```')
+  send_telegram_message(_build_error_message(receiver_email, subject, body, last_error))
   return False
 
 
@@ -58,6 +58,21 @@ def _build_message(receiver_email: str, body, subject: str, attachments: list = 
       message.attach(part)
 
   return message
+
+
+def _build_error_message(receiver_email: str, subject: str, body, error: str) -> str:
+  return (
+    f'❌ *Errore invio mail a* `{receiver_email}`\n'
+    f'*Subject:* {subject}\n\n'
+    f'*Contenuto della mail:*\n{_extract_body_text(body)}\n\n'
+    f'```\n{error}\n```'
+  )
+
+
+def _extract_body_text(body) -> str:
+  if isinstance(body, dict):
+    return body.get('text') or body.get('html') or ''
+  return body or ''
 
 
 def _connect() -> smtplib.SMTP:

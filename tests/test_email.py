@@ -35,3 +35,5 @@ def test_send_email_error_sends_telegram_message(mock_send_telegram, mock_sleep,
   assert '❌ *Errore invio mail a* `test@example.com`' in telegram_text
   assert '*Subject:* Test Subject' in telegram_text
   assert 'SMTP Connection Timeout / Brevo Error' in telegram_text
+  # Il contenuto della mail non deve andare perso: va incluso nel messaggio Telegram
+  assert 'Test body' in telegram_text
