@@ -16,6 +16,27 @@ SMTP_MAX_RETRIES = 3
 SMTP_SERVER = 'smtp-relay.brevo.com'
 
 
+def send_email(receiver_email: str, body, subject: str, attachments: list = None) -> bool:
+  message = _build_message(receiver_email, body, subject, attachments)
+  raw = message.as_string()
+
+  attempts = max(1, SMTP_MAX_RETRIES)
+  backoff = RETRY_BACKOFF
+  last_error = None
+
+  for attempt in range(1, attempts + 1):
+    try:
+      _deliver(receiver_email, raw)
+      return True
+    except Exception:
+      last_error = traceback.format_exc()
+      if attempt < attempts:
+        time.sleep(backoff * attempt)
+
+  send_telegram_message(f'❌ *Errore invio mail a* `{receiver_email}`\n*Subject:* {subject}\n```\n{last_error}\n```')
+  return False
+
+
 def _build_message(receiver_email: str, body, subject: str, attachments: list = None) -> MIMEMultipart:
   message = MIMEMultipart('alternative')
   message['From'] = formataddr((EMAIL_SENDER['name'], EMAIL_SENDER['address']))
@@ -51,24 +72,3 @@ def _connect() -> smtplib.SMTP:
 def _deliver(receiver_email: str, raw: str) -> None:
   with _connect() as server:
     server.sendmail(EMAIL_SENDER['address'], receiver_email, raw)
-
-
-def send_email(receiver_email: str, body, subject: str, attachments: list = None) -> bool:
-  message = _build_message(receiver_email, body, subject, attachments)
-  raw = message.as_string()
-
-  attempts = max(1, SMTP_MAX_RETRIES)
-  backoff = RETRY_BACKOFF
-  last_error = None
-
-  for attempt in range(1, attempts + 1):
-    try:
-      _deliver(receiver_email, raw)
-      return True
-    except Exception:
-      last_error = traceback.format_exc()
-      if attempt < attempts:
-        time.sleep(backoff * attempt)
-
-  send_telegram_message(f'❌ *Errore invio mail a* `{receiver_email}`\n*Subject:* {subject}\n```\n{last_error}\n```')
-  return False
