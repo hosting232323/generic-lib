@@ -37,14 +37,16 @@ def send_email(receiver_email: str, body, subject: str, attachments: list = None
   return False
 
 
-def _build_message(receiver_email: str, body, subject: str, attachments: list = None, signature: dict | str = None) -> MIMEMultipart:
+def _build_message(
+  receiver_email: str, body, subject: str, attachments: list = None, signature: dict | str = None
+) -> MIMEMultipart:
   message = MIMEMultipart('alternative')
   message['From'] = formataddr((EMAIL_SENDER['name'], EMAIL_SENDER['address']))
   message['To'] = receiver_email
   message['Subject'] = subject
 
-  sig_text = ""
-  sig_html = ""
+  sig_text = ''
+  sig_html = ''
   if signature:
     if isinstance(signature, dict):
       sig_text = signature.get('text', '')
@@ -53,12 +55,12 @@ def _build_message(receiver_email: str, body, subject: str, attachments: list = 
       sig_text = signature
 
   if isinstance(body, dict) and 'text' in body and 'html' in body:
-    body_text = body['text'] + (f"\n\n{sig_text}" if sig_text else "")
-    body_html = body['html'] + (f"<br><br>{sig_html}" if sig_html else "")
+    body_text = body['text'] + (f'\n\n{sig_text}' if sig_text else '')
+    body_html = body['html'] + (f'<br><br>{sig_html}' if sig_html else '')
     message.attach(MIMEText(body_text, 'plain'))
     message.attach(MIMEText(body_html, 'html'))
   elif isinstance(body, str):
-    body_text = body + (f"\n\n{sig_text}" if sig_text else "")
+    body_text = body + (f'\n\n{sig_text}' if sig_text else '')
     message.attach(MIMEText(body_text, 'plain'))
   else:
     raise ValueError('Il corpo dell\'email deve essere un dizionario con le chiavi "text" e "html" o una stringa')
