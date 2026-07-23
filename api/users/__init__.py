@@ -12,7 +12,15 @@ from database_api.operations import create, delete, update
 from .setup import get_user_by_email, get_user_by_pass_token, User, DECODE_JWT_TOKEN, GOOGLE_CLIENT_ID, SESSION_HOURS
 
 
-def register_user(email: str, register_email: dict, password: str = None, params: dict = {}):
+def _format_email_body(body, **kwargs):
+  if isinstance(body, dict):
+    return {key: value.format(**kwargs) for key, value in body.items()}
+  return body.format(**kwargs)
+
+
+def register_user(
+  email: str, register_email: dict, password: str = None, params: dict = {}, signature: dict | str = None
+):
   if get_user_by_email(email):
     return {'status': 'ko', 'message': 'Email già in uso'}
 
@@ -26,7 +34,10 @@ def register_user(email: str, register_email: dict, password: str = None, params
     params['pass_token'] = str(uuid.uuid4())
     user: User = create(User.__subclasses__()[0], params)
     send_email(
-      user.email, register_email['body'].format(domain=request.origin, token=user.pass_token), register_email['subject']
+      user.email,
+      _format_email_body(register_email['body'], domain=request.origin, token=user.pass_token),
+      register_email['subject'],
+      signature=signature,
     )
     return {
       'status': 'ok',
@@ -52,7 +63,7 @@ def login(email: str, password: str, get_user=False):
   return (response, user) if get_user else response
 
 
-def ask_change_password(email: str, change_password_email: dict):
+def ask_change_password(email: str, change_password_email: dict, signature: dict | str = None):
   user = get_user_by_email(email)
   if not user:
     return {'status': 'ko', 'message': 'Utente non trovato'}
@@ -61,8 +72,9 @@ def ask_change_password(email: str, change_password_email: dict):
 
   send_email(
     user.email,
-    change_password_email['body'].format(domain=request.origin, token=user.pass_token),
+    _format_email_body(change_password_email['body'], domain=request.origin, token=user.pass_token),
     change_password_email['subject'],
+    signature=signature,
   )
   return {'status': 'ok', 'message': 'Mail per cambio password inviata'}
 
