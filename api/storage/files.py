@@ -20,7 +20,7 @@ DEFAULT_EXTENSIONS = IMAGE_EXTENSIONS + PDF_EXTENSIONS + SPREADSHEET_EXTENSIONS 
 def get_extension(file) -> str:
   name = getattr(file, 'filename', '') or ''
   index = name.rfind('.')
-  return '' if index < 0 else name[index + 1:].lower()
+  return '' if index < 0 else name[index + 1 :].lower()
 
 
 def validate_files(files, extensions=DEFAULT_EXTENSIONS):
