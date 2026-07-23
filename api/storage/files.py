@@ -29,7 +29,6 @@ def validate_files(files, extensions=DEFAULT_EXTENSIONS):
     extension = get_extension(file)
     if extension in extensions:
       continue
-    # senza estensione nel nome si ricade sul mime dichiarato dal client
     if not extension and any(FILE_TYPES[allowed] == file.mimetype for allowed in extensions):
       continue
     invalid.append(f'.{extension}' if extension else (file.filename or file.mimetype))
