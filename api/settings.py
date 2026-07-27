@@ -18,4 +18,6 @@ BACKUP_SSH_CONFIG = os.environ.get('BACKUP_SSH_CONFIG')
 AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
 AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
 BACKUP_DAYS = int(os.environ.get('BACKUP_DAYS', 20))
+if BACKUP_DAYS < 1:
+  raise ValueError('BACKUP_DAYS deve essere almeno 1: un valore inferiore cancellerebbe tutti i backup')
 POSTGRES_DOCKER_CONTAINER = os.environ.get('POSTGRES_DOCKER_CONTAINER')

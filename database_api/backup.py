@@ -1,9 +1,8 @@
 import os
-import time
 import threading
 import subprocess
-from datetime import datetime
 from urllib.parse import urlparse
+from datetime import datetime, timedelta
 
 from api.telegram import send_telegram_message
 from api.settings import BACKUP_DAYS, BACKUP_FOLDER, POSTGRES_DOCKER_CONTAINER
@@ -12,10 +11,12 @@ from api.storage import upload_file, get_all_filenames, delete_file
 
 PG_DUMP_FLAGS = ['--blobs', '--clean', '-Fc', '--verbose']
 PG_RESTORE_FLAGS = ['--verbose', '--no-privileges', '--no-owner']
+BACKUP_EXTENSION = '.dump'
+BACKUP_DATE_FORMAT = '%y%m%d%H%M%S'
 
 
 def data_export(db_url: str):
-  filename = f'{datetime.now().strftime("%y%m%d%H%M%S")}.dump'
+  filename = f'{datetime.now().strftime(BACKUP_DATE_FORMAT)}{BACKUP_EXTENSION}'
 
   if POSTGRES_DOCKER_CONTAINER:
     _docker_pg_dump(db_url, filename)
@@ -71,19 +72,7 @@ def db_backup(db_url: str, server=None):
         upload_file(content, filename, BACKUP_FOLDER, server, 'postgres-backup', True)
       delete_file(filename, '', ignore_dev=True)
 
-      backups = get_all_filenames(BACKUP_FOLDER, server, 'postgres-backup', True)
-      dump_files = [f for f in backups if f.lower().endswith('.dump')]
-
-      now = time.time()
-      retention_seconds = BACKUP_DAYS * 86400
-
-      for file_path in dump_files:
-        file_time = os.path.getmtime(file_path)
-        if now - file_time > retention_seconds:
-          filename = os.path.basename(file_path)
-          subfolder_path = os.path.dirname(file_path) or None
-
-          delete_file(filename, BACKUP_FOLDER, server, subfolder_path, True)
+      cleanup_old_backups(server)
 
     except subprocess.CalledProcessError as e:
       send_telegram_message(
@@ -98,6 +87,37 @@ def db_backup(db_url: str, server=None):
 
   thread = threading.Thread(target=run, daemon=True)
   thread.start()
+
+
+def cleanup_old_backups(server=None):
+  """Elimina i dump piu' vecchi di BACKUP_DAYS giorni.
+
+  L'eta' del dump si ricava dal nome del file, non dal filesystem: in modalita'
+  server i path restituiti dal listing vivono sulla macchina di backup e non
+  sono raggiungibili da qui. I dump nascono da data_export come
+  `%y%m%d%H%M%S.dump`, quindi il nome e' l'unica fonte disponibile in entrambe
+  le modalita'. Un nome che non rispetta il formato viene tenuto: meglio un
+  file di troppo che una cancellazione basata su un'ipotesi.
+  """
+  expiration = datetime.now() - timedelta(days=BACKUP_DAYS)
+
+  for file_path in get_all_filenames(BACKUP_FOLDER, server, 'postgres-backup', True):
+    backup_date = parse_backup_date(file_path)
+    if backup_date is None or backup_date > expiration:
+      continue
+
+    delete_file(os.path.basename(file_path), BACKUP_FOLDER, server, os.path.dirname(file_path) or None, True)
+
+
+def parse_backup_date(file_path: str) -> datetime | None:
+  filename = os.path.basename(file_path)
+  if not filename.lower().endswith(BACKUP_EXTENSION):
+    return None
+
+  try:
+    return datetime.strptime(filename[: -len(BACKUP_EXTENSION)], BACKUP_DATE_FORMAT)
+  except ValueError:
+    return None
 
 
 def _recreate_database(admin_url: str, db_name: str):
