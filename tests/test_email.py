@@ -70,3 +70,73 @@ def test_email_signature_appending():
   msg_no_sig = _build_message('test@example.com', 'Hello world', 'Test Subject', signature=None)
   payload_no_sig = msg_no_sig.get_payload()[0].get_payload()
   assert payload_no_sig == 'Hello world'
+
+
+EMAIL_SENDER_PATCH = patch.dict(
+  'api.email.sender.EMAIL_SENDER',
+  {'name': 'Sender Name', 'address': 'sender@example.com', 'login': 'sender@example.com', 'password': 'secretpassword'},
+)
+
+
+@EMAIL_SENDER_PATCH
+def test_attachments_are_siblings_of_the_body_not_alternatives():
+  from api.email import _build_message
+
+  msg = _build_message(
+    'test@example.com',
+    {'text': 'Ordine non completato', 'html': '<p>Ordine non completato</p>'},
+    'Test Subject',
+    attachments=[{'content': b'jpeg-bytes', 'filename': 'foto.jpg'}],
+  )
+
+  assert msg.get_content_type() == 'multipart/mixed'
+  body, photo = msg.get_payload()
+  assert body.get_content_type() == 'multipart/alternative'
+  assert [part.get_content_type() for part in body.get_payload()] == ['text/plain', 'text/html']
+  assert photo.get_content_type() == 'image/jpeg'
+  assert photo.get_payload(decode=True) == b'jpeg-bytes'
+
+  assert msg['To'] == 'test@example.com'
+  assert msg['Subject'] == 'Test Subject'
+  assert body['To'] is None
+
+
+@EMAIL_SENDER_PATCH
+def test_attachment_content_type_comes_from_the_filename():
+  from api.email import _build_message
+
+  msg = _build_message(
+    'test@example.com',
+    'Corpo',
+    'Test Subject',
+    attachments=[
+      {'content': b'%PDF-', 'filename': 'formulario.pdf'},
+      {'content': b'png', 'filename': 'foto.png'},
+      {'content': b'???', 'filename': 'senza-estensione'},
+      {'content': b'csv', 'filename': 'export.csv', 'content_type': 'text/csv'},
+    ],
+  )
+
+  types = [part.get_content_type() for part in msg.get_payload()[1:]]
+  assert types == ['application/pdf', 'image/png', 'application/octet-stream', 'text/csv']
+  assert [part.get_filename() for part in msg.get_payload()[1:]][0] == 'formulario.pdf'
+
+
+@EMAIL_SENDER_PATCH
+def test_message_without_attachments_is_unchanged():
+  from api.email import _build_message
+
+  msg = _build_message('test@example.com', {'text': 'Corpo', 'html': '<p>Corpo</p>'}, 'Test Subject')
+
+  assert msg.get_content_type() == 'multipart/alternative'
+  assert [part.get_content_type() for part in msg.get_payload()] == ['text/plain', 'text/html']
+  assert msg['Subject'] == 'Test Subject'
+
+
+@EMAIL_SENDER_PATCH
+def test_empty_attachment_list_does_not_wrap_the_message():
+  from api.email import _build_message
+
+  msg = _build_message('test@example.com', 'Corpo', 'Sub', attachments=[])
+
+  assert msg.get_content_type() == 'multipart/alternative'
