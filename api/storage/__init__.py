@@ -6,8 +6,20 @@ from pathlib import Path
 from ..settings import IS_DEV
 from .utils import format_mismatch_message
 from ..telegram import send_telegram_message
-from .local import _upload_file_local, _delete_file_local, _list_files_local, _folder_backup_local
-from .server import _upload_file_server, _delete_file_server, _list_files_server, _folder_backup_server
+from .local import (
+  _upload_file_local,
+  _delete_file_local,
+  _list_files_local,
+  _folder_backup_local,
+  _cleanup_folder_backups_local,
+)
+from .server import (
+  _upload_file_server,
+  _delete_file_server,
+  _list_files_server,
+  _folder_backup_server,
+  _cleanup_folder_backups_server,
+)
 
 
 def upload_file(content, filename, folder, server=None, subfolder=None, ignore_dev=None):
@@ -39,8 +51,10 @@ def folder_backup(folder_to_backup, server=None):
     try:
       if not server:
         _folder_backup_local(folder_to_backup)
+        _cleanup_folder_backups_local()
       else:
         _folder_backup_server(folder_to_backup)
+        _cleanup_folder_backups_server()
     except subprocess.CalledProcessError as e:
       send_telegram_message(
         '\n'.join(
