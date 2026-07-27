@@ -2,7 +2,7 @@ import os
 import subprocess
 
 from .utils import set_backup_env
-from ..settings import BACKUP_FOLDER, SERVER_NAME
+from ..settings import BACKUP_FOLDER, SERVER_NAME, BACKUP_DAYS
 
 
 def _upload_file_local(content, full_path):
@@ -33,6 +33,24 @@ def _folder_backup_local(folder_to_backup):
       folder_to_backup,
       '--host',
       SERVER_NAME,
+    ],
+    env=set_backup_env(),
+    check=True,
+    capture_output=True,
+    text=True,
+  )
+
+
+def _cleanup_folder_backups_local():
+  subprocess.run(
+    [
+      'restic',
+      '-r',
+      os.path.join(BACKUP_FOLDER, 'folder-backup'),
+      'forget',
+      '--keep-daily',
+      str(BACKUP_DAYS),
+      '--prune',
     ],
     env=set_backup_env(),
     check=True,
