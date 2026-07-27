@@ -46,10 +46,12 @@ python -m src --production
 ```python
 # Mail
 from api import send_mail
+
 # User
 from api import register_user, login, ask_change_password, change_password, session_token_decorator
+
 # Storage
-from api import download_file, upload_file # da deprecare?
+from api import download_file, upload_file  # da deprecare?
 ```
 
 ## Database api
