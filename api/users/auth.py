@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from flask import g, request, jsonify, make_response
 
 from api.settings import IS_DEV
-from database_api.operations import create, update, get_by_params
+from database_api.operations import create, update, get_by_params, delete_bulk
 from .setup import DECODE_JWT_TOKEN, ACCESS_TOKEN_MINUTES, REFRESH_TOKEN_DAYS, REFRESH_COOKIE_NAME
 
 
@@ -54,7 +54,17 @@ def build_auth(session_model, get_user_by_id):
   - get_user_by_id: funzione (id) -> user, con attributi id e role
   """
 
+  def _cleanup_old_sessions(user_id):
+    """Cancella sessioni scadute o revocate dell'utente (lazy cleanup al login)."""
+    old = [
+      s for s in get_by_params(session_model, [('user_id', user_id)])
+      if s.revoked or _aware(s.expires_at) < _now()
+    ]
+    if old:
+      delete_bulk(old)
+
   def _issue_refresh(user_id) -> str:
+    _cleanup_old_sessions(user_id)
     raw = secrets.token_urlsafe(48)
     create(
       session_model,
