@@ -119,18 +119,25 @@ Il vero problema di sicurezza delle password su questo branch è un **altro** (�
 
 Ordinati per gravità.
 
-### 🔴 CRITICO — `password_shadow`: copia reversibile della password
-Per implementare "mostra password" all'admin (`UserTable.vue` → `GET user/<id>/password`), il BE tiene una **copia AES reversibile** della password di ogni utente (`encrypt_reversible`), decifrabile con `PASSWORD_SHADOW_KEY`.
+### 🔴 CRITICO — `password_shadow`: copia reversibile della password → ✅ DECISO: si rimuove
+Oggi, per la "mostra password" admin (`UserTable.vue` → `GET user/<id>/password`), il BE tiene una **copia AES reversibile** della password di ogni utente (`encrypt_reversible`), decifrabile con `PASSWORD_SHADOW_KEY`.
 
 **Perché è grave:** annulla di fatto l'hashing. Un dump del DB **+** la chiave (una sola chiave statica, in env) = **tutte le password degli utenti in chiaro**. È esattamente lo scenario che l'hashing serve a prevenire. Gli utenti quasi sempre riusano le password → il danno esce dal perimetro dell'app.
 
-**Decisione da prendere (business):** questa feature "l'admin vede la password dell'utente" **va giustificata o rimossa**. Opzioni, in ordine di preferenza:
-1. **Rimuovere** la feature e la colonna `password_shadow` → torniamo a solo-hash (ideale).
-2. Se il business la richiede davvero: sostituirla con un flusso di **reset/invio credenziali** (l'admin genera una password temporanea che l'utente cambia al primo accesso) — nessuna password memorizzata in forma reversibile.
-3. Se proprio va tenuta: almeno separare la chiave dal DB (KMS/secret manager), usare **AES-GCM** (autenticato) invece di CBC, e loggare/audit-are ogni reveal. **Resta comunque un rischio strutturale.**
+> **DECISIONE PRESA (29-07): opzione "solo hash + reset".** Si abbandona la "mostra password". La password è **solo hashata** (scrypt), non recuperabile. Il bisogno operativo dell'admin (consegnare le credenziali) si copre con un flusso di **imposta/rigenera password**: alla creazione utente o su "rigenera", il valore viene mostrato **una sola volta** (quello digitato dall'admin o generato) da comunicare all'utente; se l'utente la dimentica, l'admin **resetta** (nuovo valore). L'admin non vede mai la password *esistente*.
+>
+> Motivazione: l'admin mantiene tutto ciò che gli serve, ma il DB non contiene più password reversibili → il rischio critico si chiude (non si attenua). L'unica cosa che si perde — "rileggere a posteriori la vecchia password" — non è un requisito legittimo.
+>
+> **⚠️ Al momento questa decisione è SOLO documentata: il codice non è ancora stato modificato** (shadow tuttora presente sul branch). Vedi i task in §6 per l'implementazione.
 
-### 🟠 MEDIO — AES-CBC senza autenticazione (shadow e legacy)
-`encrypt_reversible`/`legacy_*` usano **AES-CBC senza MAC**: cifratura malleabile, esposta a padding-oracle. Se la copia reversibile sopravvive (§5.3), passare ad **AES-GCM**.
+**Implementazione prevista (non ancora fatta):**
+- `italco-be`: rimuovere `encrypt_reversible/decrypt_reversible` da `create_user`/`login`, eliminare l'endpoint `GET <id>/password` e `reveal_user_password`, togliere la colonna `password_shadow` (schema + migration 050). Nuovo endpoint admin `POST <id>/password` (imposta/rigenera → restituisce il valore una volta). Tenere `check_password` con supporto legacy; `legacy_encrypt` resta per la verifica al primo login, `legacy_decrypt` si può rimuovere.
+- `italco-fe`: in `UserTable.vue` sostituire l'occhio "reveal" con azione "reimposta password" (dialog che mostra il nuovo valore una volta); nello store `administrationUser.js` sostituire `revealPassword` con `resetPassword`.
+- `generic-lib`: rimuovere `encrypt_reversible/decrypt_reversible`/`_shadow_key`/`PASSWORD_SHADOW_KEY` da `security.py`.
+- env/CI: rimuovere `PASSWORD_SHADOW_KEY` da `.env.sample`, `.env.test`, `gitlab/test.yml`.
+
+### 🟠 MEDIO — AES-CBC senza autenticazione (legacy)
+`legacy_*` usa **AES-CBC senza MAC**: cifratura malleabile. È solo un ponte di migrazione (verifica delle vecchie password al primo login) e sparisce con la dismissione di `legacy.py`. Con la decisione sopra, `encrypt_reversible` (shadow) viene rimosso del tutto.
 
 ### 🟠 MEDIO — Chiave/IV legacy hardcoded come default
 `legacy.py`: `LEGACY_PASSWORD_SECRET_KEY = os.environ.get(..., 'local-dev-key-1234567890')` e IV `'1234567890123456'` di default. Accettabile solo come ponte di migrazione. **TODO:** in prod le env devono essere valorizzate esplicitamente e il fallback andrebbe rimosso a migrazione completata (`legacy.py` va poi eliminato del tutto).
@@ -149,15 +156,19 @@ Dopo il rebase su `main` (vedi §8), gli endpoint media di italco-be (`orders/ph
 
 **Implicazione:** l'access token JWT finisce in **log di accesso del server, cronologia del browser e header Referer**. È mitigato dal fatto che è a vita breve (15 min), ma resta un vettore di leak. **Hardening consigliato:** token media dedicato monouso/brevissimo, oppure header `Authorization` via fetch+blob invece di URL diretta.
 
-### 🟢 NOTA — reveal password: doppio gate
-`reveal_password` è protetto da ruolo ADMIN e nega la lettura per gli utenti ADMIN stessi. Corretto come mitigazione, ma non risolve il problema strutturale di §5.
+### 🟢 NOTA — reveal password: doppio gate (verrà rimosso)
+`reveal_password` è protetto da ruolo ADMIN e nega la lettura per gli utenti ADMIN stessi. Mitigazione corretta, ma non risolve il problema strutturale: con la decisione di §5 l'endpoint viene **eliminato**, non blindato.
 
 ---
 
 ## 6. TODO — come andare avanti
 
 ### Bloccanti prima del merge
-- [ ] **Decidere il destino di `password_shadow`/"mostra password"** (§5) — è la decisione chiave, va presa con il business.
+- [ ] **Implementare "solo hash + reset"** (§5, decisione presa 29-07 — al momento SOLO documentata):
+  - [ ] generic-lib `security.py`: rimuovere `encrypt_reversible`/`decrypt_reversible`/`_shadow_key`/`PASSWORD_SHADOW_KEY`.
+  - [ ] italco-be: togliere shadow da `create_user`/`login`, eliminare endpoint `GET <id>/password` + `reveal_user_password`, rimuovere colonna `password_shadow` (schema + migration 050), aggiungere `POST <id>/password` (imposta/rigenera, valore mostrato una volta).
+  - [ ] italco-fe: `UserTable.vue` occhio "reveal" → azione "reimposta password"; store `revealPassword` → `resetPassword`.
+  - [ ] env/CI: rimuovere `PASSWORD_SHADOW_KEY` da `.env.sample`, `.env.test`, `gitlab/test.yml`.
 - [ ] **Rollout librerie prima delle app** (§8.1): portare `generic-lib` e `generic-fe` sul branch di default GitHub (o pinnare `@feat/session-refactor`) **prima** di attendersi pipeline verdi su italco. Senza questo la CI italco fallisce con `ModuleNotFoundError: api.users.auth`.
 - [ ] **Testare i media su pagina aperta >15 min** (§8.2): verificare che foto/documenti non si rompano quando l'access token nell'URL scade; decidere la strategia (URL lazy / refresh pre-media / TTL dedicato).
 - [ ] Verificare che **tutti i test siano verdi** in ciascun repo e che la **pipeline** giri verde (regola in cima).
@@ -165,12 +176,11 @@ Dopo il rebase su `main` (vedi §8), gli endpoint media di italco-be (`orders/ph
 - [ ] Verificare `allowed_origins` espliciti in prod con `supports_credentials=True` (§5).
 
 ### Migrazione dati / rollout
-- [ ] Applicare la **migration 050** su tutti gli ambienti (staging → prod) e verificare l'esistenza di `user_session` e `password_shadow`.
+- [ ] Applicare la **migration 050** su tutti gli ambienti (staging → prod) e verificare l'esistenza di `user_session`. (La parte `password_shadow` della migration va tolta come da §5.)
 - [ ] Confermare che il **login-time migration** (re-hash al primo accesso) copra tutti gli utenti attivi; pianificare come gestire gli utenti che non fanno login da tempo.
 - [ ] Definire la **data di dismissione di `legacy.py`** (e la rimozione dei default hardcoded) una volta migrati tutti.
 
-### Hardening (post-decisione §5)
-- [ ] Se la copia reversibile resta: **AES-GCM** + chiave da secret manager + audit log dei reveal.
+### Hardening
 - [ ] Rimuovere il fallback plaintext in `verify_password` a migrazione conclusa.
 - [ ] Valutare **reuse-detection** del refresh token (revoca dell'intera "famiglia" al rilevamento di un replay) — oggi il token ruotato viene solo rifiutato.
 - [ ] Valutare un tetto al numero di sessioni attive per utente + job di **pulizia** delle `user_session` scadute/revocate.
