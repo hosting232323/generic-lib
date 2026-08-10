@@ -26,13 +26,28 @@ pieno) il dump appena prodotto e' l'unica copia esistente. Non va cancellato:
 finisce in BACKUP_FALLBACK_FOLDER sul sistema operativo e la notifica Telegram
 parte comunque, dicendo dove e' rimasto. Al primo backup riuscito i dump tenuti
 da parte vengono ricaricati e rimossi dal fallback.
+
+Quella cartella e' un mount condiviso da tutti i progetti della macchina, ma i
+dump si chiamano solo `%y%m%d%H%M%S.dump`: senza una sottocartella per progetto
+il flush di uno caricherebbe i dump degli altri nella propria destinazione e li
+cancellerebbe dal fallback.
+
+## Soglia sul disco locale
+
+Il fallback pero' scrive sullo stesso disco che ospita Postgres e gli altri
+servizi: accumulare dump li' finche' il filesystem non si riempie farebbe cadere
+la macchina, non solo il backup. Sopra BACKUP_DISK_THRESHOLD il dump quindi non
+parte proprio; l'unica cosa che continua a girare e' il flush dei dump gia' in
+fallback, che e' cio' che libera il disco.
 """
 
+import os
 import pytest
 import subprocess
+from collections import namedtuple
 from datetime import datetime, timedelta
 
-from api.settings import BACKUP_DAYS
+from api.settings import BACKUP_DAYS, PROJECT_NAME
 from database_api import backup as backup_module
 from database_api.backup import cleanup_old_backups, db_backup, flush_fallback_backups, parse_backup_date
 
@@ -98,9 +113,11 @@ def test_cleanup_keeps_files_it_cannot_date(monkeypatch):
 
 
 def _use_fallback_folder(monkeypatch, tmp_path, create=False):
-  fallback = tmp_path / 'fallback'
+  """Riproduce il layout di produzione: la cartella del progetto dentro la root."""
+  fallback = tmp_path / PROJECT_NAME
   if create:
     fallback.mkdir()
+  monkeypatch.setattr(backup_module, 'BACKUP_FALLBACK_ROOT', str(tmp_path))
   monkeypatch.setattr(backup_module, 'BACKUP_FALLBACK_FOLDER', str(fallback))
   return fallback
 
@@ -140,6 +157,16 @@ def _no_space_error(*args, **kwargs):
   )
 
 
+_DiskUsage = namedtuple('_DiskUsage', 'total used free')
+
+
+def _fake_disk_usage(monkeypatch, used_percent: float):
+  """Il controllo sulla soglia non deve dipendere dal disco di chi lancia i test."""
+  total = 100 * 1024**3
+  used = int(total * used_percent / 100)
+  monkeypatch.setattr(backup_module.shutil, 'disk_usage', lambda path: _DiskUsage(total, used, total - used))
+
+
 def _prepare_backup(monkeypatch, tmp_path, dump_name):
   dump = tmp_path / dump_name
   dump.write_bytes(b'dump-di-prova')
@@ -147,6 +174,7 @@ def _prepare_backup(monkeypatch, tmp_path, dump_name):
   monkeypatch.setattr(backup_module, 'BACKUP_FOLDER', str(tmp_path / 'destinazione'))
   monkeypatch.setattr(backup_module, 'data_export', lambda db_url: str(dump))
   monkeypatch.setattr(backup_module, 'cleanup_old_backups', lambda *args, **kwargs: None)
+  _fake_disk_usage(monkeypatch, 10)
   _run_threads_inline(monkeypatch)
   return dump
 
@@ -295,6 +323,125 @@ def test_successful_backup_recovers_the_pending_dumps(monkeypatch, tmp_path):
   assert deleted == [str(dump)]
   assert list(fallback.iterdir()) == []
   assert 'Dump di Fallback Ricaricati (1)' in messages[0]
+
+
+def test_backup_does_not_start_when_the_local_disk_is_over_the_threshold(monkeypatch, tmp_path):
+  _use_fallback_folder(monkeypatch, tmp_path)
+  messages = _collect_telegram(monkeypatch)
+  uploaded = _collect_uploads(monkeypatch)
+  _prepare_backup(monkeypatch, tmp_path, _dump_name(0))
+  monkeypatch.setattr(backup_module, 'BACKUP_DISK_THRESHOLD', 90)
+  monkeypatch.setattr(
+    backup_module, 'data_export', lambda db_url: pytest.fail('il dump non va prodotto con il disco quasi pieno')
+  )
+  _fake_disk_usage(monkeypatch, 95)
+
+  db_backup('postgresql://user:pwd@localhost/db', server=True)
+
+  assert uploaded == []
+  assert len(messages) == 1
+  assert 'Bloccato' in messages[0]
+  assert '95.0%' in messages[0]
+  assert 'soglia 90%' in messages[0]
+  assert '5.0 GB liberi' in messages[0]
+
+
+def test_backup_runs_when_the_local_disk_is_under_the_threshold(monkeypatch, tmp_path):
+  _use_fallback_folder(monkeypatch, tmp_path)
+  messages = _collect_telegram(monkeypatch)
+  uploaded = _collect_uploads(monkeypatch)
+  dump = _prepare_backup(monkeypatch, tmp_path, _dump_name(0))
+  monkeypatch.setattr(backup_module, 'delete_file', lambda *args, **kwargs: None)
+  monkeypatch.setattr(backup_module, 'BACKUP_DISK_THRESHOLD', 90)
+  _fake_disk_usage(monkeypatch, 89.9)
+
+  db_backup('postgresql://user:pwd@localhost/db', server=True)
+
+  assert uploaded == [dump.name]
+  assert messages == []
+
+
+def test_the_threshold_blocks_the_backup_as_soon_as_it_is_reached(monkeypatch, tmp_path):
+  _use_fallback_folder(monkeypatch, tmp_path)
+  messages = _collect_telegram(monkeypatch)
+  _prepare_backup(monkeypatch, tmp_path, _dump_name(0))
+  monkeypatch.setattr(backup_module, 'BACKUP_DISK_THRESHOLD', 90)
+  _fake_disk_usage(monkeypatch, 90)
+
+  db_backup('postgresql://user:pwd@localhost/db', server=True)
+
+  assert 'Bloccato' in messages[0]
+
+
+def test_a_blocked_backup_still_flushes_the_pending_dumps(monkeypatch, tmp_path):
+  """Il flush e' l'unica cosa che libera il disco: bloccarlo sarebbe uno stallo.
+
+  I dump tenuti in fallback occupano proprio il filesystem che ha superato la
+  soglia. Se il controllo li lasciasse li' fino al prossimo backup riuscito,
+  quel backup non arriverebbe mai.
+  """
+  fallback = _use_fallback_folder(monkeypatch, tmp_path, create=True)
+  messages = _collect_telegram(monkeypatch)
+  uploaded = _collect_uploads(monkeypatch)
+  _prepare_backup(monkeypatch, tmp_path, _dump_name(0))
+  monkeypatch.setattr(backup_module, 'BACKUP_DISK_THRESHOLD', 90)
+  _fake_disk_usage(monkeypatch, 97)
+
+  pending = _dump_name(2)
+  (fallback / pending).write_bytes(b'dump-di-prova')
+
+  db_backup('postgresql://user:pwd@localhost/db', server=True)
+
+  assert uploaded == [pending]
+  assert list(fallback.iterdir()) == []
+  assert 'Bloccato' in messages[0]
+  assert 'Dump di Fallback Ricaricati (1)' in messages[1]
+
+
+def test_the_same_filesystem_is_checked_once(monkeypatch, tmp_path):
+  """Cartella di lavoro e fallback stanno di norma sullo stesso disco."""
+  fallback = _use_fallback_folder(monkeypatch, tmp_path, create=True)
+  monkeypatch.chdir(tmp_path)
+
+  assert backup_module.local_disk_paths() == [os.getcwd()]
+  assert fallback.exists()
+
+
+def test_a_fallback_folder_that_does_not_exist_yet_is_not_checked(monkeypatch, tmp_path):
+  _use_fallback_folder(monkeypatch, tmp_path)
+  monkeypatch.chdir(tmp_path)
+
+  assert backup_module.local_disk_paths() == [os.getcwd()]
+
+
+def test_the_fallback_folder_is_separated_per_project():
+  """Il mount e' condiviso da tutti i progetti, la sottocartella no."""
+  assert backup_module.BACKUP_FALLBACK_FOLDER == os.path.join(backup_module.BACKUP_FALLBACK_ROOT, PROJECT_NAME)
+
+
+def test_flush_leaves_the_dumps_of_the_other_projects_where_they_are(monkeypatch, tmp_path):
+  """Senza separazione il flush ruberebbe i dump altrui.
+
+  I nomi contengono solo il timestamp: caricati nella destinazione di questo
+  progetto e rimossi dal fallback, per il progetto che li ha prodotti sarebbero
+  persi, e nella cartella di backup arriverebbe il dump di un altro database.
+  """
+  fallback = _use_fallback_folder(monkeypatch, tmp_path, create=True)
+  uploaded = _collect_uploads(monkeypatch)
+  _collect_telegram(monkeypatch)
+
+  altro_progetto = tmp_path / 'altro-progetto'
+  altro_progetto.mkdir()
+  dump_altrui = _dump_name(2)
+  (altro_progetto / dump_altrui).write_bytes(b'dump-di-un-altro-progetto')
+
+  mio = _dump_name(1)
+  (fallback / mio).write_bytes(b'dump-di-prova')
+
+  flush_fallback_backups(server=True)
+
+  assert uploaded == [mio]
+  assert [path.name for path in altro_progetto.iterdir()] == [dump_altrui]
 
 
 def test_cleanup_passes_folder_and_server_to_delete_file(monkeypatch):

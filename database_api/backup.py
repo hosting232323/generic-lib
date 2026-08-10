@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 from datetime import datetime, timedelta
 
 from api.telegram import send_telegram_message
-from api.settings import BACKUP_DAYS, BACKUP_FOLDER, POSTGRES_DOCKER_CONTAINER
+from api.settings import BACKUP_DAYS, BACKUP_DISK_THRESHOLD, BACKUP_FOLDER, POSTGRES_DOCKER_CONTAINER, PROJECT_NAME
 from api.storage import upload_file, get_all_filenames, delete_file
 
 
@@ -16,10 +16,12 @@ PG_RESTORE_FLAGS = ['--verbose', '--no-privileges', '--no-owner']
 BACKUP_EXTENSION = '.dump'
 BACKUP_DATE_FORMAT = '%y%m%d%H%M%S'
 DISK_FULL_MARKERS = ('no space left on device', 'disk quota exceeded', 'quota exceeded')
-# Path fisso, non configurabile: il dump di fallback deve stare sul disco del
-# server e sopravvivere alla ricreazione del container, quindi va montato uguale
-# in tutti i progetti che usano db_backup.
-BACKUP_FALLBACK_FOLDER = '/opt/db-backup-fallback'
+BACKUP_FALLBACK_ROOT = '/opt/db-backup-fallback'
+BACKUP_FALLBACK_FOLDER = os.path.join(BACKUP_FALLBACK_ROOT, PROJECT_NAME)
+
+
+class LocalDiskAlmostFullError(Exception):
+  """Il disco del sistema operativo ha superato la soglia: il dump non parte."""
 
 
 def data_export(db_url: str):
@@ -75,11 +77,17 @@ def db_backup(db_url: str, server=None):
       if not BACKUP_FOLDER:
         raise ValueError('BACKUP_FOLDER non configurata')
 
+      check_local_disk_usage()
+
       filename = data_export(db_url)
       upload_backup(filename, server)
       delete_file(filename, '', ignore_dev=True)
 
       cleanup_old_backups(server)
+      flush_fallback_backups(server)
+
+    except LocalDiskAlmostFullError as e:
+      report_failed_backup(db_url, e, None, server)
       flush_fallback_backups(server)
 
     except Exception as e:
@@ -94,14 +102,72 @@ def upload_backup(file_path: str, server=None):
     upload_file(content, os.path.basename(file_path), BACKUP_FOLDER, server, 'postgres-backup', True)
 
 
+def check_local_disk_usage():
+  """Blocca il backup quando il disco della macchina e' quasi pieno.
+
+  Il dump nasce in locale e, se l'upload non riesce, resta in
+  BACKUP_FALLBACK_FOLDER: entrambi vivono sul sistema operativo del server, che
+  ospita anche Postgres e gli altri servizi. Riempirlo del tutto non fa perdere
+  solo il backup ma la macchina, quindi sopra BACKUP_DISK_THRESHOLD si salta il
+  giro e si avvisa, invece di produrre un dump che il disco non regge.
+  """
+  for path in local_disk_paths():
+    used_percent, free = disk_usage(path)
+    if used_percent < BACKUP_DISK_THRESHOLD:
+      continue
+
+    raise LocalDiskAlmostFullError(
+      f'Disco locale al {used_percent:.1f}% su "{path}" '
+      f'(soglia {BACKUP_DISK_THRESHOLD}%, {format_size(free)} liberi): dump non avviato.'
+    )
+
+
+def local_disk_paths() -> list:
+  """Percorsi da controllare: dove finisce il dump e dove finirebbe il fallback.
+
+  Sono quasi sempre lo stesso filesystem, ma il fallback puo' stare su un mount
+  a parte. I duplicati si scartano per device, cosi' il controllo non ripete lo
+  stesso disco due volte. La root del fallback serve per il caso in cui quel
+  mount esista ma la sottocartella del progetto non sia ancora stata creata.
+  """
+  paths = []
+  seen = set()
+
+  for path in (os.getcwd(), BACKUP_FALLBACK_FOLDER, BACKUP_FALLBACK_ROOT):
+    if not os.path.isdir(path):
+      continue
+
+    device = os.stat(path).st_dev
+    if device in seen:
+      continue
+
+    seen.add(device)
+    paths.append(path)
+
+  return paths
+
+
+def disk_usage(path: str) -> tuple:
+  usage = shutil.disk_usage(path)
+  return usage.used / usage.total * 100, usage.free
+
+
+def format_size(size: int) -> str:
+  return f'{size / 1024**3:.1f} GB'
+
+
 def report_failed_backup(db_url: str, error: Exception, file_path: str = None, server=None):
   title = '**📦 DB Backup Fallito**'
-  if is_disk_full(error):
+  label = '**❌ Errore durante il backup'
+  if isinstance(error, LocalDiskAlmostFullError):
+    title = '**📦 DB Backup Bloccato — disco della macchina quasi pieno**'
+    label = '**🛑 Backup non avviato'
+  elif is_disk_full(error):
     title = '**📦 DB Backup Fallito — spazio esaurito**'
 
   message = [
     f'{title}\n▶️ `{db_url}`\n',
-    f'**❌ Errore durante il backup ({"server" if server else "local"}):**',
+    f'{label} ({"server" if server else "local"}):**',
     f'`{error_details(error)}`',
   ]
 
