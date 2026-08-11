@@ -101,9 +101,17 @@ class SessionWithStorage:
     # Una delete il cui path coincide con un upload ancora da pubblicare viene saltata:
     # ci pensa l'upload a sovrascrivere il file, senza la finestra in cui la risorsa
     # non esisterebbe e senza dipendere dall'ordine in cui il chiamante le registra.
-    pending_uploads = {self._resolve_path(upload) for upload in self._uploads}
+    # Il path da solo non basta come chiave: upload_file e delete_file scelgono storage
+    # locale o remoto in base a server, quindi lo stesso path su destinazioni diverse e'
+    # un file diverso e una delete remota non va saltata per un upload locale.
+    def target(file_data):
+      return bool(file_data['server']), get_full_path(
+        file_data['folder'], file_data['subfolder'], file_data['ignore_dev'], file_data['filename']
+      )
+
+    pending_uploads = {target(upload) for upload in self._uploads}
     for file_data in self._deletes:
-      if self._resolve_path(file_data) in pending_uploads:
+      if target(file_data) in pending_uploads:
         continue
       try:
         delete_file(**file_data)
@@ -112,10 +120,6 @@ class SessionWithStorage:
       except Exception:
         logger.exception('Impossibile eliminare il file dopo il commit: %s', file_data['filename'])
     self._deletes.clear()
-
-  @staticmethod
-  def _resolve_path(file_data: dict) -> str:
-    return get_full_path(file_data['folder'], file_data['subfolder'], file_data['ignore_dev'], file_data['filename'])
 
   def _discard_uploads(self):
     for file_data in self._uploads:

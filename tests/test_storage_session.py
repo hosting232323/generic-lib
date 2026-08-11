@@ -191,6 +191,57 @@ def test_niente_file_temporanei_residui(storage, tmp_path):
   assert after - before == set()
 
 
+@pytest.fixture
+def recorded(monkeypatch):
+  """Registra le chiamate a upload_file/delete_file senza toccare il disco.
+
+  Serve per le destinazioni remote, che nei test non sono raggiungibili: quello
+  che conta e' se la delete viene eseguita o saltata, non il suo effetto.
+  """
+  calls = {'uploads': [], 'deletes': []}
+  monkeypatch.setattr(
+    'api.storage.session.upload_file',
+    lambda content, **kwargs: calls['uploads'].append((bool(kwargs.get('server')), kwargs['filename'])),
+  )
+  monkeypatch.setattr(
+    'api.storage.session.delete_file',
+    lambda **kwargs: calls['deletes'].append((bool(kwargs.get('server')), kwargs['filename'])),
+  )
+  return calls
+
+
+def test_upload_locale_non_salta_una_delete_remota_sullo_stesso_path(storage, recorded):
+  """Locale e remoto sono destinazioni diverse: la collisione non deve valere fra le due."""
+  with storage as session:
+    session.upload(io.BytesIO(b'locale'), '1.jpg', session.folder, subfolder='blog')
+    session.delete_file('1.jpg', session.folder, subfolder='blog', server=True)
+    session.commit()
+
+  assert recorded['deletes'] == [(True, '1.jpg')]
+  assert recorded['uploads'] == [(False, '1.jpg')]
+
+
+def test_upload_remoto_non_salta_una_delete_locale_sullo_stesso_path(storage, recorded):
+  with storage as session:
+    session.upload(io.BytesIO(b'remoto'), '1.jpg', session.folder, subfolder='blog', server=True)
+    session.delete_file('1.jpg', session.folder, subfolder='blog')
+    session.commit()
+
+  assert recorded['deletes'] == [(False, '1.jpg')]
+  assert recorded['uploads'] == [(True, '1.jpg')]
+
+
+def test_sostituzione_remota_salta_la_delete_come_quella_locale(storage, recorded):
+  """A parita' di destinazione la collisione continua a valere."""
+  with storage as session:
+    session.upload(io.BytesIO(b'remoto'), '1.jpg', session.folder, subfolder='blog', server=True)
+    session.delete_file('1.jpg', session.folder, subfolder='blog', server=True)
+    session.commit()
+
+  assert recorded['deletes'] == []
+  assert recorded['uploads'] == [(True, '1.jpg')]
+
+
 def test_get_full_path_coerente_con_il_valore_restituito_da_upload(storage):
   with storage as session:
     returned = session.upload(io.BytesIO(b'x'), '1.jpg', session.folder, subfolder='blog')
