@@ -104,14 +104,14 @@ class SessionWithStorage:
     # Il path da solo non basta come chiave: upload_file e delete_file scelgono storage
     # locale o remoto in base a server, quindi lo stesso path su destinazioni diverse e'
     # un file diverso e una delete remota non va saltata per un upload locale.
-    def target(file_data):
-      return bool(file_data['server']), get_full_path(
-        file_data['folder'], file_data['subfolder'], file_data['ignore_dev'], file_data['filename']
-      )
+    pending_uploads = set()
+    for upload in self._uploads:
+      path = get_full_path(upload['folder'], upload['subfolder'], upload['ignore_dev'], upload['filename'])
+      pending_uploads.add((bool(upload['server']), path))
 
-    pending_uploads = {target(upload) for upload in self._uploads}
     for file_data in self._deletes:
-      if target(file_data) in pending_uploads:
+      path = get_full_path(file_data['folder'], file_data['subfolder'], file_data['ignore_dev'], file_data['filename'])
+      if (bool(file_data['server']), path) in pending_uploads:
         continue
       try:
         delete_file(**file_data)
