@@ -78,8 +78,12 @@ class SessionWithStorage:
       self._discard_uploads()
       raise
     self._committed = True
-    self._publish_uploads()
+    # Le delete vanno prima degli upload: quando un file viene sostituito riusando lo
+    # stesso path (es. la cover di un post, il cui nome deriva dall'id della riga) una
+    # delete eseguita dopo cancellerebbe il file appena pubblicato, lasciando a DB una
+    # chiave che punta al vuoto.
     self._run_deletes()
+    self._publish_uploads()
 
   def _publish_uploads(self):
     for file_data in self._uploads:
@@ -94,7 +98,13 @@ class SessionWithStorage:
     self._uploads.clear()
 
   def _run_deletes(self):
+    # Una delete il cui path coincide con un upload ancora da pubblicare viene saltata:
+    # ci pensa l'upload a sovrascrivere il file, senza la finestra in cui la risorsa
+    # non esisterebbe e senza dipendere dall'ordine in cui il chiamante le registra.
+    pending_uploads = {self._resolve_path(upload) for upload in self._uploads}
     for file_data in self._deletes:
+      if self._resolve_path(file_data) in pending_uploads:
+        continue
       try:
         delete_file(**file_data)
       except FileNotFoundError:
@@ -102,6 +112,10 @@ class SessionWithStorage:
       except Exception:
         logger.exception('Impossibile eliminare il file dopo il commit: %s', file_data['filename'])
     self._deletes.clear()
+
+  @staticmethod
+  def _resolve_path(file_data: dict) -> str:
+    return get_full_path(file_data['folder'], file_data['subfolder'], file_data['ignore_dev'], file_data['filename'])
 
   def _discard_uploads(self):
     for file_data in self._uploads:
