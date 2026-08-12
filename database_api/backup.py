@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 from datetime import datetime, timedelta
 
 from api.telegram import send_telegram_message
-from api.settings import BACKUP_DAYS, BACKUP_DISK_THRESHOLD, BACKUP_FOLDER, POSTGRES_DOCKER_CONTAINER, PROJECT_NAME
+from api.settings import BACKUP_DAYS, BACKUP_FOLDER, POSTGRES_DOCKER_CONTAINER, PROJECT_NAME
 from api.storage import upload_file, get_all_filenames, delete_file
 
 
@@ -17,6 +17,7 @@ BACKUP_EXTENSION = '.dump'
 BACKUP_DATE_FORMAT = '%y%m%d%H%M%S'
 DISK_FULL_MARKERS = ('no space left on device', 'disk quota exceeded', 'quota exceeded')
 BACKUP_FALLBACK_ROOT = '/opt/db-backup-fallback'
+BACKUP_DISK_THRESHOLD = 90
 BACKUP_FALLBACK_FOLDER = os.path.join(BACKUP_FALLBACK_ROOT, PROJECT_NAME)
 
 
