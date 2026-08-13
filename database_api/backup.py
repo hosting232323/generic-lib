@@ -85,11 +85,6 @@ def db_backup(db_url: str, server=None):
       delete_file(filename, '', ignore_dev=True)
 
       cleanup_old_backups(server)
-      flush_fallback_backups(server)
-
-    except LocalDiskAlmostFullError as e:
-      report_failed_backup(db_url, e, None, server)
-      flush_fallback_backups(server)
 
     except Exception as e:
       report_failed_backup(db_url, e, filename, server)
@@ -106,11 +101,12 @@ def upload_backup(file_path: str, server=None):
 def check_local_disk_usage():
   """Blocca il backup quando il disco della macchina e' quasi pieno.
 
-  Il dump nasce in locale e, se l'upload non riesce, resta in
-  BACKUP_FALLBACK_FOLDER: entrambi vivono sul sistema operativo del server, che
-  ospita anche Postgres e gli altri servizi. Riempirlo del tutto non fa perdere
-  solo il backup ma la macchina, quindi sopra BACKUP_DISK_THRESHOLD si salta il
-  giro e si avvisa, invece di produrre un dump che il disco non regge.
+  Il dump nasce sempre qui, sul sistema operativo che ospita anche Postgres e
+  gli altri servizi, e qui resta finche' non e' stato trasferito; senza `server`
+  qui c'e' pure il ripiego, in BACKUP_FALLBACK_FOLDER. Riempire questo disco non
+  fa perdere solo il backup ma la macchina, quindi sopra BACKUP_DISK_THRESHOLD
+  si salta il giro e si avvisa, invece di produrre un dump che il disco non
+  regge.
   """
   for path in local_disk_paths():
     used_percent, free = disk_usage(path)
@@ -173,53 +169,47 @@ def report_failed_backup(db_url: str, error: Exception, file_path: str = None, s
   ]
 
   if file_path and os.path.exists(file_path):
-    message.append(keep_dump_locally(file_path))
+    message.append(keep_dump(file_path, server))
 
   send_telegram_message('\n'.join(message))
 
 
-def keep_dump_locally(file_path: str) -> str:
+def keep_dump(file_path: str, server=None) -> str:
+  """Mette al riparo il dump appena prodotto: e' l'unica copia esistente.
+
+  La cartella di ripiego e' sempre quella della macchina che ospita i backup:
+  con `server` e' quella remota, dove il dump sta accanto alla destinazione e si
+  va a cercarlo per un restore; senza, e' questa macchina. Il disco che regge
+  Postgres e gli altri servizi non e' un ripiego: se i backup vivono altrove, li'
+  il dump non ci resta.
+
+  Il dump poi non si muove piu': quando l'hdd torna ad avere spazio sono i backup
+  nuovi a riprendere la strada giusta, i vecchi restano nel ripiego. Sono gia' al
+  sicuro, e rimetterli in circolo vorrebbe dire trasferimenti e notifiche in piu'
+  per un file che nessuno sta cercando li'.
+  """
   try:
-    os.makedirs(BACKUP_FALLBACK_FOLDER, exist_ok=True)
-    fallback_path = shutil.move(file_path, os.path.join(BACKUP_FALLBACK_FOLDER, os.path.basename(file_path)))
-    return f"\n**💾 Dump salvato in locale:** `{fallback_path}`\nVerra' ricaricato al primo backup riuscito."
+    where = 'sulla macchina di backup' if server else 'nella cartella di ripiego'
+    return f'\n**💾 Dump tenuto {where}:** `{park_dump(file_path, server)}`'
 
-  except OSError as e:
-    return f'\n**🛑 Dump perso:** salvataggio di fallback non riuscito in `{BACKUP_FALLBACK_FOLDER}`\n`{e}`'
-
-
-def flush_fallback_backups(server=None):
-  if not os.path.isdir(BACKUP_FALLBACK_FOLDER):
-    return
-
-  recovered = []
-  for filename in sorted(os.listdir(BACKUP_FALLBACK_FOLDER)):
-    fallback_path = os.path.join(BACKUP_FALLBACK_FOLDER, filename)
-    if not os.path.isfile(fallback_path) or parse_backup_date(filename) is None:
-      continue
-
-    try:
-      upload_backup(fallback_path, server)
-      os.remove(fallback_path)
-      recovered.append(filename)
-
-    except Exception as e:
-      send_telegram_message(
-        '\n'.join(
-          [
-            f'**📦 Recupero Dump di Fallback Fallito**\n▶️ `{fallback_path}`\n',
-            f'**❌ Errore durante il ricaricamento ({"server" if server else "local"}):**',
-            f'`{error_details(e)}`',
-            '\nIl dump resta in locale, si riprova al prossimo backup.',
-          ]
-        )
-      )
-      break
-
-  if recovered:
-    send_telegram_message(
-      '\n'.join([f'**📦 Dump di Fallback Ricaricati ({len(recovered)})**\n'] + [f'▶️ `{name}`' for name in recovered])
+  except Exception as e:
+    return (
+      f'\n**🛑 Dump non messo al sicuro:** `{BACKUP_FALLBACK_FOLDER}` non raggiungibile'
+      f'\n`{error_details(e)}`'
+      f'\nIl dump resta su questa macchina in `{file_path}`.'
     )
+
+
+def park_dump(file_path: str, server=None) -> str:
+  if not server:
+    os.makedirs(BACKUP_FALLBACK_FOLDER, exist_ok=True)
+    return shutil.move(file_path, os.path.join(BACKUP_FALLBACK_FOLDER, os.path.basename(file_path)))
+
+  with open(file_path, 'rb') as content:
+    fallback_path = upload_file(content, os.path.basename(file_path), BACKUP_FALLBACK_ROOT, server, PROJECT_NAME, True)
+
+  os.remove(file_path)
+  return fallback_path
 
 
 def is_disk_full(error: Exception) -> bool:

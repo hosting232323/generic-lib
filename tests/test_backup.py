@@ -19,37 +19,49 @@ non richiede di toccare il disco. Da qui i casi coperti:
 - i path remoti (inesistenti in locale) funzionano come quelli locali;
 - un nome fuori formato o senza estensione .dump si tiene, non si indovina.
 
-## Fallback locale
+## Fallback
 
-Quando l'upload verso la destinazione finale non riesce (tipicamente disco
-pieno) il dump appena prodotto e' l'unica copia esistente. Non va cancellato:
-finisce in BACKUP_FALLBACK_FOLDER sul sistema operativo e la notifica Telegram
-parte comunque, dicendo dove e' rimasto. Al primo backup riuscito i dump tenuti
-da parte vengono ricaricati e rimossi dal fallback.
+Quando l'upload verso la destinazione finale non riesce (tipicamente l'hdd
+esterno pieno) il dump appena prodotto e' l'unica copia esistente. Non va
+cancellato: si mette da parte e la notifica Telegram parte comunque, dicendo
+dove e' rimasto.
 
-Quella cartella e' un mount condiviso da tutti i progetti della macchina, ma i
-dump si chiamano solo `%y%m%d%H%M%S.dump`: senza una sottocartella per progetto
-il flush di uno caricherebbe i dump degli altri nella propria destinazione e li
-cancellerebbe dal fallback.
+Con `server` il posto giusto e' la macchina di backup, in BACKUP_FALLBACK_FOLDER:
+il disco che si e' riempito e' l'hdd esterno, non quello di sistema, e il dump
+resta comunque sulla macchina dove lo si va a cercare per un restore. La
+macchina che ospita il servizio non c'entra mai: e' quella che regge Postgres e
+tutto il resto, e non e' un posto dove parcheggiare dump. Se la macchina di
+backup non risponde il ripiego non avviene: il dump resta dov'e' nato e la
+notifica lo dice, cosi' chi legge sa che deve intervenire.
+
+Da li' il dump non si muove piu': quando l'hdd torna ad avere spazio sono i
+backup nuovi a riprendere la strada giusta, i vecchi restano nel fallback. Sono
+gia' al sicuro sulla stessa macchina, e riportarli in destinazione a posteriori
+vorrebbe dire trasferimenti e notifiche per un file che nessuno cerca li'.
+
+Quella cartella e' condivisa da tutti i progetti della macchina, ma i dump si
+chiamano solo `%y%m%d%H%M%S.dump`: senza una sottocartella per progetto non ci
+sarebbe modo di sapere da quale database viene il dump che si sta per
+ripristinare.
 
 ## Soglia sul disco locale
 
-Il fallback pero' scrive sullo stesso disco che ospita Postgres e gli altri
-servizi: accumulare dump li' finche' il filesystem non si riempie farebbe cadere
-la macchina, non solo il backup. Sopra BACKUP_DISK_THRESHOLD il dump quindi non
-parte proprio; l'unica cosa che continua a girare e' il flush dei dump gia' in
-fallback, che e' cio' che libera il disco.
+Il dump nasce comunque qui e qui resta finche' non e' stato trasferito, e qui
+finisce anche il ripiego quando la macchina di backup e' irraggiungibile:
+riempire questo filesystem farebbe cadere la macchina, non solo il backup. Sopra
+BACKUP_DISK_THRESHOLD il dump quindi non parte proprio.
 """
 
 import os
 import pytest
 import subprocess
+from pathlib import Path
 from collections import namedtuple
 from datetime import datetime, timedelta
 
 from api.settings import BACKUP_DAYS, PROJECT_NAME
 from database_api import backup as backup_module
-from database_api.backup import cleanup_old_backups, db_backup, flush_fallback_backups, parse_backup_date
+from database_api.backup import cleanup_old_backups, db_backup, parse_backup_date
 
 
 def _dump_name(days_ago: float) -> str:
@@ -167,6 +179,10 @@ def _fake_disk_usage(monkeypatch, used_percent: float):
   monkeypatch.setattr(backup_module.shutil, 'disk_usage', lambda path: _DiskUsage(total, used, total - used))
 
 
+def _ssh_down(*args, **kwargs):
+  raise subprocess.CalledProcessError(255, 'ssh', stderr='ssh: connect to host backup port 22: Connection refused')
+
+
 def _prepare_backup(monkeypatch, tmp_path, dump_name):
   dump = tmp_path / dump_name
   dump.write_bytes(b'dump-di-prova')
@@ -179,30 +195,92 @@ def _prepare_backup(monkeypatch, tmp_path, dump_name):
   return dump
 
 
-def test_disk_full_moves_the_dump_to_the_fallback_folder(monkeypatch, tmp_path):
-  fallback = _use_fallback_folder(monkeypatch, tmp_path)
+def _use_backup_server(monkeypatch, tmp_path, destination_error=None):
+  """Mette in piedi la macchina di backup: destinazione e cartella di ripiego.
+
+  Sono due cartelle di tmp_path perche' i test non hanno un host remoto, ma
+  restano due posti distinti raggiungibili solo attraverso upload_file: nessun
+  test puo' quindi cavarsela leggendo il dump dal disco locale, che e'
+  esattamente cio' che il codice non deve piu' fare.
+
+  La cartella di ripiego locale resta impostata a parte, sotto tmp_path/locale:
+  in produzione ha lo stesso path su entrambe le macchine, qui va distinta per
+  poter dire su quale delle due e' finito il dump.
+
+  Va chiamata dopo _prepare_backup, di cui sovrascrive la destinazione.
+  """
+  destination = tmp_path / 'macchina-di-backup' / 'hdd-esterno' / 'postgres-backup'
+  fallback = tmp_path / 'macchina-di-backup' / 'opt' / PROJECT_NAME
+
+  monkeypatch.setattr(backup_module, 'BACKUP_FOLDER', str(destination.parent))
+  monkeypatch.setattr(backup_module, 'BACKUP_FALLBACK_ROOT', str(fallback.parent))
+  monkeypatch.setattr(backup_module, 'BACKUP_FALLBACK_FOLDER', str(tmp_path / 'locale' / PROJECT_NAME))
+
+  def upload_file(content, filename, folder, server=None, subfolder=None, ignore_dev=None):
+    target = Path(folder) / subfolder / filename
+    if destination_error and target.parent == destination:
+      destination_error()
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(content.read())
+    return str(target)
+
+  monkeypatch.setattr(backup_module, 'upload_file', upload_file)
+
+  return destination, fallback
+
+
+def test_disk_full_keeps_the_dump_on_the_backup_server(monkeypatch, tmp_path):
+  """Il caso per cui il fallback esiste: l'hdd esterno pieno.
+
+  A riempirsi e' il disco della destinazione, non quello di sistema della
+  macchina di backup: il dump resta li' accanto, e la macchina che ospita il
+  servizio non deve vederselo arrivare addosso.
+  """
   messages = _collect_telegram(monkeypatch)
   dump = _prepare_backup(monkeypatch, tmp_path, _dump_name(0))
-  monkeypatch.setattr(backup_module, 'upload_file', _no_space_error)
+  destination, fallback = _use_backup_server(monkeypatch, tmp_path, destination_error=_no_space_error)
+  local_fallback = Path(backup_module.BACKUP_FALLBACK_FOLDER)
   monkeypatch.setattr(backup_module, 'delete_file', lambda *args, **kwargs: pytest.fail('il dump non va cancellato'))
 
   db_backup('postgresql://user:pwd@localhost/db', server=True)
 
   assert not dump.exists()
   assert [path.name for path in fallback.iterdir()] == [dump.name]
+  assert not destination.exists()
+  assert not local_fallback.exists()
 
   assert len(messages) == 1
   assert 'spazio esaurito' in messages[0]
   assert 'No space left on device' in messages[0]
+  assert 'macchina di backup' in messages[0]
   assert str(fallback / dump.name) in messages[0]
 
 
-def test_notification_arrives_even_when_the_fallback_fails(monkeypatch, tmp_path):
-  """Il disco locale pieno e' l'unico caso in cui il dump si perde davvero.
+def test_without_the_backup_server_the_dump_is_not_parked_on_the_service_machine(monkeypatch, tmp_path):
+  """Senza ssh non c'e' ripiego: il dump non si scarica sul disco dei servizi.
 
-  Anche allora il messaggio deve partire: e' l'unico modo per sapere che non
-  esiste piu' nessuna copia.
+  Quel disco regge Postgres e tutto il resto, non e' un deposito di dump. Il
+  file resta dov'e' nato e la notifica dice qual e' il problema e dove trovarlo:
+  da li' in poi e' una cosa da guardare a mano.
   """
+  fallback = _use_fallback_folder(monkeypatch, tmp_path)
+  messages = _collect_telegram(monkeypatch)
+  dump = _prepare_backup(monkeypatch, tmp_path, _dump_name(0))
+  monkeypatch.setattr(backup_module, 'upload_file', _ssh_down)
+
+  db_backup('postgresql://user:pwd@localhost/db', server=True)
+
+  assert dump.exists()
+  assert not fallback.exists()
+  assert len(messages) == 1
+  assert 'Dump non messo al sicuro' in messages[0]
+  assert 'Connection refused' in messages[0]
+  assert str(dump) in messages[0]
+
+
+def test_notification_arrives_even_when_the_fallback_folder_is_unusable(monkeypatch, tmp_path):
+  """Senza `server` il ripiego e' l'unico posto disponibile: se manca, si avvisa."""
   occupato = tmp_path / 'occupato'
   occupato.write_text("non e' una cartella")
   monkeypatch.setattr(backup_module, 'BACKUP_FALLBACK_FOLDER', str(occupato / 'fallback'))
@@ -211,28 +289,40 @@ def test_notification_arrives_even_when_the_fallback_fails(monkeypatch, tmp_path
   dump = _prepare_backup(monkeypatch, tmp_path, _dump_name(0))
   monkeypatch.setattr(backup_module, 'upload_file', _no_space_error)
 
-  db_backup('postgresql://user:pwd@localhost/db', server=True)
+  db_backup('postgresql://user:pwd@localhost/db')
 
   assert dump.exists()
   assert len(messages) == 1
-  assert 'Dump perso' in messages[0]
+  assert 'Dump non messo al sicuro' in messages[0]
 
 
 def test_dump_is_kept_on_any_upload_failure_not_only_disk_full(monkeypatch, tmp_path):
-  fallback = _use_fallback_folder(monkeypatch, tmp_path)
   messages = _collect_telegram(monkeypatch)
   dump = _prepare_backup(monkeypatch, tmp_path, _dump_name(0))
 
-  def ssh_down(*args, **kwargs):
-    raise subprocess.CalledProcessError(255, 'ssh', stderr='ssh: connect to host backup port 22: Connection refused')
+  def permission_denied():
+    raise subprocess.CalledProcessError(23, 'rsync', stderr='rsync: mkstemp failed: Permission denied (13)')
 
-  monkeypatch.setattr(backup_module, 'upload_file', ssh_down)
+  _, fallback = _use_backup_server(monkeypatch, tmp_path, destination_error=permission_denied)
 
   db_backup('postgresql://user:pwd@localhost/db', server=True)
 
   assert [path.name for path in fallback.iterdir()] == [dump.name]
   assert 'spazio esaurito' not in messages[0]
-  assert 'Dump salvato in locale' in messages[0]
+  assert 'Dump tenuto sulla macchina di backup' in messages[0]
+
+
+def test_in_local_mode_the_dump_stays_on_the_machine(monkeypatch, tmp_path):
+  """Senza `server` non c'e' nessun'altra macchina: il ripiego e' quello di casa."""
+  fallback = _use_fallback_folder(monkeypatch, tmp_path)
+  messages = _collect_telegram(monkeypatch)
+  dump = _prepare_backup(monkeypatch, tmp_path, _dump_name(0))
+  monkeypatch.setattr(backup_module, 'upload_file', _no_space_error)
+
+  db_backup('postgresql://user:pwd@localhost/db')
+
+  assert [path.name for path in fallback.iterdir()] == [dump.name]
+  assert 'Dump tenuto nella cartella di ripiego' in messages[0]
 
 
 def test_failure_before_the_dump_only_notifies(monkeypatch, tmp_path):
@@ -248,81 +338,30 @@ def test_failure_before_the_dump_only_notifies(monkeypatch, tmp_path):
   assert 'BACKUP_FOLDER non configurata' in messages[0]
 
 
-def test_flush_uploads_pending_dumps_from_the_oldest(monkeypatch, tmp_path):
-  fallback = _use_fallback_folder(monkeypatch, tmp_path, create=True)
+def test_when_the_space_comes_back_only_the_new_dumps_take_the_right_road(monkeypatch, tmp_path):
+  """L'hdd torna disponibile: il backup nuovo va in destinazione, il resto no.
+
+  I dump gia' messi da parte restano nel fallback e nessuno li tocca: stanno
+  sulla stessa macchina, sono raggiungibili per un restore, e riportarli in
+  destinazione non aggiungerebbe niente se non trasferimenti e notifiche.
+  """
   messages = _collect_telegram(monkeypatch)
-  uploaded = _collect_uploads(monkeypatch)
-
-  older, newer = _dump_name(3), _dump_name(1)
-  for name in (newer, older):
-    (fallback / name).write_bytes(b'dump-di-prova')
-
-  flush_fallback_backups(server=True)
-
-  assert uploaded == [older, newer]
-  assert list(fallback.iterdir()) == []
-  assert 'Dump di Fallback Ricaricati (2)' in messages[0]
-
-
-def test_flush_keeps_the_dump_when_the_destination_is_still_full(monkeypatch, tmp_path):
-  fallback = _use_fallback_folder(monkeypatch, tmp_path, create=True)
-  messages = _collect_telegram(monkeypatch)
-  monkeypatch.setattr(backup_module, 'upload_file', _no_space_error)
-
-  for days_ago in (3, 1):
-    (fallback / _dump_name(days_ago)).write_bytes(b'dump-di-prova')
-
-  flush_fallback_backups(server=True)
-
-  assert len(list(fallback.iterdir())) == 2
-  assert len(messages) == 1
-  assert 'Recupero Dump di Fallback Fallito' in messages[0]
-
-
-def test_flush_ignores_files_that_are_not_dumps(monkeypatch, tmp_path):
-  fallback = _use_fallback_folder(monkeypatch, tmp_path, create=True)
-  messages = _collect_telegram(monkeypatch)
-  uploaded = _collect_uploads(monkeypatch)
-
-  (fallback / 'note.txt').write_text('appunti')
-  (fallback / 'backup-manuale.dump').write_bytes(b'dump-di-prova')
-
-  flush_fallback_backups()
-
-  assert uploaded == []
-  assert messages == []
-  assert len(list(fallback.iterdir())) == 2
-
-
-def test_flush_does_nothing_without_a_fallback_folder(monkeypatch, tmp_path):
-  _use_fallback_folder(monkeypatch, tmp_path)
-  messages = _collect_telegram(monkeypatch)
-  uploaded = _collect_uploads(monkeypatch)
-
-  flush_fallback_backups(server=True)
-
-  assert uploaded == []
-  assert messages == []
-
-
-def test_successful_backup_recovers_the_pending_dumps(monkeypatch, tmp_path):
-  fallback = _use_fallback_folder(monkeypatch, tmp_path, create=True)
-  messages = _collect_telegram(monkeypatch)
-  uploaded = _collect_uploads(monkeypatch)
-
-  pending = _dump_name(2)
-  (fallback / pending).write_bytes(b'dump-di-prova')
-
   dump = _prepare_backup(monkeypatch, tmp_path, _dump_name(0))
+  destination, fallback = _use_backup_server(monkeypatch, tmp_path)
+
+  parcheggiato = _dump_name(2)
+  fallback.mkdir(parents=True)
+  (fallback / parcheggiato).write_bytes(b'dump-di-prova')
+
   deleted = []
   monkeypatch.setattr(backup_module, 'delete_file', lambda filename, *args, **kwargs: deleted.append(filename))
 
   db_backup('postgresql://user:pwd@localhost/db', server=True)
 
-  assert uploaded == [dump.name, pending]
+  assert [path.name for path in destination.iterdir()] == [dump.name]
+  assert [path.name for path in fallback.iterdir()] == [parcheggiato]
   assert deleted == [str(dump)]
-  assert list(fallback.iterdir()) == []
-  assert 'Dump di Fallback Ricaricati (1)' in messages[0]
+  assert messages == []
 
 
 def test_backup_does_not_start_when_the_local_disk_is_over_the_threshold(monkeypatch, tmp_path):
@@ -373,13 +412,8 @@ def test_the_threshold_blocks_the_backup_as_soon_as_it_is_reached(monkeypatch, t
   assert 'Bloccato' in messages[0]
 
 
-def test_a_blocked_backup_still_flushes_the_pending_dumps(monkeypatch, tmp_path):
-  """Il flush e' l'unica cosa che libera il disco: bloccarlo sarebbe uno stallo.
-
-  I dump tenuti in fallback occupano proprio il filesystem che ha superato la
-  soglia. Se il controllo li lasciasse li' fino al prossimo backup riuscito,
-  quel backup non arriverebbe mai.
-  """
+def test_a_blocked_backup_leaves_the_dumps_already_kept_aside(monkeypatch, tmp_path):
+  """Il blocco riguarda il dump nuovo, non quelli gia' messi da parte."""
   fallback = _use_fallback_folder(monkeypatch, tmp_path, create=True)
   messages = _collect_telegram(monkeypatch)
   uploaded = _collect_uploads(monkeypatch)
@@ -387,15 +421,15 @@ def test_a_blocked_backup_still_flushes_the_pending_dumps(monkeypatch, tmp_path)
   monkeypatch.setattr(backup_module, 'BACKUP_DISK_THRESHOLD', 90)
   _fake_disk_usage(monkeypatch, 97)
 
-  pending = _dump_name(2)
-  (fallback / pending).write_bytes(b'dump-di-prova')
+  parcheggiato = _dump_name(2)
+  (fallback / parcheggiato).write_bytes(b'dump-di-prova')
 
   db_backup('postgresql://user:pwd@localhost/db', server=True)
 
-  assert uploaded == [pending]
-  assert list(fallback.iterdir()) == []
+  assert uploaded == []
+  assert [path.name for path in fallback.iterdir()] == [parcheggiato]
+  assert len(messages) == 1
   assert 'Bloccato' in messages[0]
-  assert 'Dump di Fallback Ricaricati (1)' in messages[1]
 
 
 def test_the_same_filesystem_is_checked_once(monkeypatch, tmp_path):
@@ -414,34 +448,23 @@ def test_a_fallback_folder_that_does_not_exist_yet_is_not_checked(monkeypatch, t
   assert backup_module.local_disk_paths() == [os.getcwd()]
 
 
-def test_the_fallback_folder_is_separated_per_project():
-  """Il mount e' condiviso da tutti i progetti, la sottocartella no."""
+def test_the_fallback_folder_is_separated_per_project(monkeypatch, tmp_path):
+  """La cartella e' condivisa da tutti i progetti della macchina, i dump no.
+
+  I nomi contengono solo il timestamp: buttati tutti insieme, al momento del
+  restore non ci sarebbe modo di sapere da quale database viene il dump che si
+  sta per ripristinare.
+  """
   assert backup_module.BACKUP_FALLBACK_FOLDER == os.path.join(backup_module.BACKUP_FALLBACK_ROOT, PROJECT_NAME)
 
-
-def test_flush_leaves_the_dumps_of_the_other_projects_where_they_are(monkeypatch, tmp_path):
-  """Senza separazione il flush ruberebbe i dump altrui.
-
-  I nomi contengono solo il timestamp: caricati nella destinazione di questo
-  progetto e rimossi dal fallback, per il progetto che li ha prodotti sarebbero
-  persi, e nella cartella di backup arriverebbe il dump di un altro database.
-  """
-  fallback = _use_fallback_folder(monkeypatch, tmp_path, create=True)
-  uploaded = _collect_uploads(monkeypatch)
   _collect_telegram(monkeypatch)
+  dump = _prepare_backup(monkeypatch, tmp_path, _dump_name(0))
+  _, fallback = _use_backup_server(monkeypatch, tmp_path, destination_error=_no_space_error)
 
-  altro_progetto = tmp_path / 'altro-progetto'
-  altro_progetto.mkdir()
-  dump_altrui = _dump_name(2)
-  (altro_progetto / dump_altrui).write_bytes(b'dump-di-un-altro-progetto')
+  db_backup('postgresql://user:pwd@localhost/db', server=True)
 
-  mio = _dump_name(1)
-  (fallback / mio).write_bytes(b'dump-di-prova')
-
-  flush_fallback_backups(server=True)
-
-  assert uploaded == [mio]
-  assert [path.name for path in altro_progetto.iterdir()] == [dump_altrui]
+  assert fallback.name == PROJECT_NAME
+  assert [path.name for path in fallback.iterdir()] == [dump.name]
 
 
 def test_cleanup_passes_folder_and_server_to_delete_file(monkeypatch):
