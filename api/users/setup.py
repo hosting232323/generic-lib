@@ -11,6 +11,10 @@ GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
 ACCESS_TOKEN_MINUTES = int(os.environ.get('ACCESS_TOKEN_MINUTES', 15))
 REFRESH_TOKEN_DAYS = int(os.environ.get('REFRESH_TOKEN_DAYS', 30))
 REFRESH_COOKIE_NAME = os.environ.get('REFRESH_COOKIE_NAME', 'refresh_token')
+# Per quanto una sessione revocata resta a DB come lapide per il reuse
+# detection: abbastanza da coprire il replay di un token appena rubato, non
+# tanto da far crescere la tabella senza motivo.
+REFRESH_TOMBSTONE_DAYS = int(os.environ.get('REFRESH_TOMBSTONE_DAYS', 7))
 
 
 class User(BaseEntity):

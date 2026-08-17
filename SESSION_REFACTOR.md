@@ -45,10 +45,44 @@ Factory che restituisce un oggetto `SimpleAuth` con:
 
 | Metodo | Cosa fa |
 |---|---|
-| `login_response(user, extra)` | Emette access token + refresh token (cookie), risposta JSON `{status, access_token, ...extra}` |
-| `refresh()` | Legge il cookie, valida la sessione, **ruota** il refresh token, restituisce un nuovo access token |
+| `login_response(user, extra, transport)` | Emette access token + refresh token, risposta JSON `{status, access_token, ...extra}` |
+| `refresh()` | Valida la sessione, **ruota** il refresh token, restituisce un nuovo access token |
 | `logout()` | Revoca la sessione (`revoked=True`) e cancella il cookie |
 | `authentication(roles, allow_query_token)` | Decoratore: valida l'access token, applica il controllo ruolo, inietta `g.log_user` e passa `user` alla view |
+| `revoke_user_sessions(user_id)` | Chiude tutte le sessioni attive di un utente (reset password, reuse detection) |
+
+### Il trasporto del refresh token è pluggabile
+
+Il nucleo (token opaco, SHA-256 a riposo, rotazione, revoca) è unico; cambia
+solo **dove viaggia** il refresh token:
+
+| Client | Trasporto | Dove sta | Come lo chiede |
+|---|---|---|---|
+| Browser (italco-fe, fastsite-fe) | cookie `HttpOnly` | browser | default, non dichiara nulla |
+| Client nativo (delivery-app) | campo `refresh_token` nel body JSON | secure storage del device | header `X-Auth-Transport: bearer` |
+
+Serviva perché `delivery-app` è un client Flutter con `package:http`: le policy
+`SameSite` sono del browser e lì non esistono, e un cookie jar sarebbe solo un
+impiccio. Su nativo, per giunta, non c'è XSS, quindi il refresh token in secure
+storage è più sicuro che in un cookie.
+
+`refresh()` e `logout()` leggono il cookie e, se assente, il body; rispondono
+con lo stesso trasporto con cui sono stati chiamati.
+
+### Reuse detection
+
+La rotazione non aggiorna più la riga in place: la vecchia diventa una **lapide
+revocata** (con scadenza accorciata a `REFRESH_TOMBSTONE_DAYS`, default 7) e il
+token nuovo nasce su una riga sua. Se qualcuno ripresenta un refresh già speso,
+non è più indistinguibile da un token inventato: si sa che è un replay, e
+`revoke_user_sessions` chiude **tutte** le sessioni dell'utente.
+
+Senza questo, chi ruba il refresh token e lo usa per primo resta dentro mentre
+la vittima si becca un 401 e rifà login. È il controllo che regge l'intero
+canale bearer, dove il token non è protetto da `HttpOnly`.
+
+Il cleanup al login cancella solo le sessioni **scadute**: le lapidi revocate
+vanno tenute, sono ciò su cui si regge il riconoscimento del replay.
 
 Dettagli di sicurezza già corretti:
 - Refresh token salvato **solo hashato** (SHA-256) — un dump della tabella `user_session` non espone token utilizzabili.
@@ -133,7 +167,19 @@ Ordinati per gravità.
 `legacy.py`: `LEGACY_PASSWORD_SECRET_KEY = os.environ.get(..., 'local-dev-key-1234567890')` e IV `'1234567890123456'` di default. Accettabile solo come ponte di migrazione. In prod le env devono essere valorizzate esplicitamente e il fallback andrà rimosso a migrazione completata (`legacy.py` va poi eliminato del tutto).
 
 ### 🟠 MEDIO — token in querystring sui media (`allow_query_token`)
-Gli endpoint media di italco-be (`orders/photos/<file>`, `rae/<folder>/<file>`) usano `allow_query_token=True` e il FE manda l'**access token in querystring** via `http.withSessionToken(url)`. L'access token JWT finisce in **log di accesso del server, cronologia del browser e header Referer**. È mitigato dalla vita breve (15 min), ma resta un vettore di leak. **Hardening consigliato:** token media dedicato monouso/brevissimo, oppure header `Authorization` via fetch+blob invece di URL diretta.
+Gli endpoint media di italco-be (`orders/photos/<file>`, `rae/<folder>/<file>`) usano `allow_query_token=True` e il FE manda l'**access token in querystring** via `http.withSessionToken(url)`. L'access token JWT finisce in **log di accesso del server, cronologia del browser e header Referer**. È mitigato dalla vita breve (15 min), ma resta un vettore di leak.
+
+**Sbloccato il 17-08:** `allow_query_token` non è più *alternativo* all'header ma
+*aggiuntivo*. Prima quegli endpoint ignoravano `Authorization`, il che rendeva
+la querystring l'unica strada possibile e quindi obbligatoria; ora si possono
+scaricare via `fetch` + blob con l'header, senza toccare il backend. Il token
+è anche tollerato con prefisso `Bearer ` nella query (era la causa dei ~10 test
+media rossi: `query_token` passava `Bearer <jwt>` nell'URL).
+
+**Resta da fare lato FE:** sostituire `withSessionToken(url)` con fetch+blob, e
+decidere se serve comunque un token media dedicato per i `<img>` (dove l'header
+non è mandabile). Con l'access token a 15 minuti, un URL "congelato" nel `src`
+al render smette di funzionare dopo un quarto d'ora.
 
 ### 🟡 BASSO — `verify_password` con fallback plaintext
 In `security.py`, se `stored` non è hashato, `verify_password` fa `stored == raw_password` (confronto in chiaro). È il ponte per i progetti non ancora migrati. Da rimuovere una volta migrati tutti gli utenti/progetti.
@@ -150,6 +196,10 @@ Il segreto JWT HS256 dev'essere lungo e casuale in produzione (in test è `dummy
 
 ### Bloccanti prima del merge
 - [x] ~~**Implementare "solo hash + reset"** (§5)~~ → **FATTO** (29-07)
+- [x] ~~Reuse detection sul refresh token~~ → **FATTO** (17-08, §2)
+- [x] ~~Revoca delle sessioni al reset password~~ → **FATTO** (17-08)
+- [x] ~~Trasporto bearer per i client nativi~~ → **FATTO** (17-08, §2)
+- [ ] **`delivery-app` va aggiornata prima del deploy di italco-be** (§9)
 - [ ] **Rollout librerie prima delle app** (§8.1): portare `generic-lib` e `generic-fe` sul branch di default GitHub (o pinnare `@feat/session-refactor`) **prima** di attendersi pipeline verdi su italco.
 - [ ] **Testare i media su pagina aperta >15 min** (§8.2): verificare che foto/documenti non si rompano quando l'access token nell'URL scade; decidere la strategia (URL lazy / refresh pre-media / TTL dedicato).
 - [ ] Verificare che **tutti i test siano verdi** in ciascun repo e che la **pipeline** giri verde (regola in cima).
@@ -208,3 +258,107 @@ Il branch `feat/session-refactor` è stato **rebasato su `origin/main`** in tutt
 - generic-fe: `npm run build` → OK (104 kB) ✅
 - italco-fe: `npm run build` → OK ✅
 - italco-be: `pytest tests/unit` → **507 passed** ✅ (10 failed pre-esistenti su endpoint media, vedi §8.2)
+
+---
+
+## 9. Incremento del 17-08 — invariante same-origin, trasporto, verifiche
+
+### L'invariante su cui poggia tutto il design a cookie
+
+Verificata sui repo, non assunta:
+
+> **Le sessioni sono sempre same-origin. Il cross-origin è sempre anonimo.**
+
+- Tutti i backend usano lo stesso template di deploy: Traefik
+  `Host(${PUBLIC_HOST}) && PathPrefix(/api)` con `API_PREFIX: api`, e ogni
+  `allowed_origins` elenca apex + `www` dello **stesso** dominio del prodotto.
+  italco-be sta su `ares-logistics.it/api`, il frontend su `ares-logistics.it`:
+  **stessa origin**, quindi `SameSite=Lax`/`Strict` funziona e non serve nessuna
+  difesa CSRF aggiuntiva.
+- Le ~20 origin extra di generic-be sono le vetrine, che **non hanno sessioni**:
+  copiano lo stesso `http.js` con un `getToken` che è boilerplate morto, non
+  usano `AuthManager`, e chiamano endpoint pubblici (il mailer non ha alcun
+  decoratore). È un tema di CORS, non di cookie. La guardia
+  `auth_header == 'null'` in generic-lib è il fossile di questo pattern.
+
+Se un domani nasce un login utente su un dominio cliente, quella non è una
+feature in più: è il cambio della premessa. In quel caso si usa il trasporto
+bearer, **non** `SameSite=None`, perché i cookie di terze parti sono già
+bloccati su Safari e in dismissione altrove.
+
+### Cosa è entrato in questo incremento
+
+**generic-lib**
+- Trasporto pluggabile cookie|bearer (§2) e `revoke_user_sessions`.
+- Reuse detection con lapidi; il cleanup al login tocca solo le scadute.
+- `allow_query_token` diventa additivo rispetto all'header, e il prefisso
+  `Bearer ` è tollerato ovunque arrivi il token.
+- Un access token firmato ma senza `sub` (formato vecchio) è un **401**, non
+  più un `KeyError` → 500 → report d'errore su Telegram.
+- Test: da 9 a 16 su `test_auth.py`; suite completa **72 passed**.
+
+**italco-be**
+- `reset_password` revoca le sessioni aperte dell'utente (+ test).
+- `EXTRA_ALLOWED_ORIGINS`: la CORS wildcard con credenziali resta solo per lo
+  sviluppo locale; valorizzando la env anche l'ambiente di test (che gira con
+  `IS_DEV=1`) passa a lista esplicita.
+- `REFRESH_COOKIE_PATH=/api` e `REFRESH_COOKIE_SAMESITE=Strict` nel deploy.
+- `LEGACY_PASSWORD_SECRET_KEY` di test era **27 byte**: lunghezza non valida per
+  AES, quindi `legacy_encrypt` sollevava sempre e i test di login erano rossi
+  in `.env.test` **e** in `gitlab/test.yml`. Portata a 32 byte.
+- Aggiornati i test che codificavano il comportamento vecchio: header ignorato
+  sui media, e `status: session` dove ora un ruolo non abilitato dà 403.
+- Suite unit: **531 passed, 0 failed** (erano 14 rossi, ~11 dei quali dati per
+  "preesistenti": erano tutti la stessa causa, il `Bearer ` nella query).
+
+**italco-fe**
+- `persist: { paths: [...] }` **non funzionava**: in
+  pinia-plugin-persistedstate v4 l'opzione è `pick`, e `paths` viene ignorata in
+  silenzio → lo store veniva persistito intero, **token compreso**. Cioè la
+  modifica cardine del branch lato FE era inefficace. Corretta, più un
+  `beforeHydrate` che ripulisce il token già salvato da chi usava l'app prima.
+
+### Verifiche eseguite (17-08)
+
+- `generic-lib`: suite completa → **72 passed**.
+- `italco-be`: `pytest ./tests/unit` su Postgres reale → **531 passed**.
+- **Browser reale** (Chromium), frontend e backend serviti sulla stessa origin
+  con un proxy `/api`, per riprodurre la topologia di produzione:
+  - login → 200, cookie `HttpOnly; SameSite=Strict`, invisibile a
+    `document.cookie`, nessun `refresh_token` nel body;
+  - refresh → il cookie viaggia da solo, rotazione confermata (token diversi);
+  - media con header `Authorization` → **404** (autorizzato, file assente) dove
+    prima era 401; idem con `?token=<jwt>` e con `?token=Bearer <jwt>`; senza
+    token → 401;
+  - logout → cookie cancellato, refresh successivo → 401;
+  - store: piantato in `localStorage` uno stato legacy con token, dopo il reload
+    lo storage contiene solo `{role, userId}` e il token in memoria è vuoto;
+  - `user_session` su Postgres: sessioni attive a 30 giorni, lapidi revocate
+    accorciate a 7.
+
+### ⚠️ Confermato nel browser: il frontend condiviso manca davvero
+
+Il login **dalla UI** non funziona. Con il `generic-module` oggi pubblicato,
+`AuthManager` pretende ancora `secretKey`/`iv` (che il branch ha giustamente
+smesso di passare) e cifra la password con una chiave `undefined`: il backend
+risponde "Credenziali errate". Le chiamate diritte agli endpoint funzionano
+tutte, quindi il backend è a posto: è la libreria FE a non esistere ancora.
+
+Da fare in `generic-fe`, prima di qualunque deploy:
+1. rimuovere `encrypt.js` e i prop `secretKey`/`iv` da `AuthManager`/`UserLogin`
+   (attenzione: `fastsite-fe` importa ancora `encryptPassword` in 4 file);
+2. `refreshEndpoint` + refresh-on-401 con lock anti-concorrenza;
+3. `credentials: 'include'` **sempre**, non solo in `logout.js`: su same-origin
+   non serve, ma senza di esso il branch si romperebbe in silenzio il giorno in
+   cui frontend e backend finissero su origin diverse.
+
+### ⚠️ `delivery-app` va aggiornata prima del deploy
+
+`auth_service.dart` legge `response['token']`, che ora si chiama `access_token`:
+al deploy l'app non fa più login. Inoltre dipende dal `new_token` in ogni
+risposta, che non esiste più. Il backend ora offre il canale bearer
+(`X-Auth-Transport: bearer` → `refresh_token` nel body), quindi il lavoro lato
+app è: leggere `access_token`, salvare il `refresh_token` in secure storage,
+implementare il refresh. Da notare che la chiave AES delle password è hardcoded
+nel sorgente Flutter (`12345678901234567890123456789012`, la chiave
+placeholder): è pubblica, e questo alza la priorità della migrazione a scrypt.

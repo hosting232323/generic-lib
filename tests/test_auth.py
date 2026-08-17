@@ -5,28 +5,36 @@ Il modello mentale: due token con ruoli diversi.
 - **access token**: JWT breve, stateless, `sub = user.id`. Autorizza le
   chiamate via header `Authorization: Bearer <token>`. Non e' revocabile ma
   scade in fretta.
-- **refresh token**: stringa opaca lunga, in cookie HttpOnly. Non viaggia mai
-  nel body ne' nell'header: se ne salva solo l'hash in una riga di `session`.
-  Serve solo a ottenere un nuovo access token, ed e' revocabile.
+- **refresh token**: stringa opaca lunga, di norma in cookie HttpOnly. Se ne
+  salva solo l'hash in una riga di `session`. Serve solo a ottenere un nuovo
+  access token, ed e' revocabile. Un client nativo, dove il cookie non ha
+  senso, puo' chiederlo nel body con l'header X-Auth-Transport: bearer.
 
 Le regole verificate qui, una per test:
 
 - login: emette access token nel body e setta il cookie refresh HttpOnly;
 - refresh: col cookie valido rilascia un nuovo access token e **ruota** il
   refresh (il vecchio smette di valere subito);
-- replay: ripresentare un refresh gia' ruotato viene rifiutato con 401;
+- replay: ripresentare un refresh gia' ruotato viene rifiutato con 401 **e**
+  chiude tutte le sessioni dell'utente (reuse detection);
 - logout: revoca la sessione e cancella il cookie;
 - decorator: header assente/non valido -> 401; ruolo sbagliato -> 403;
-- allow_query_token: legge il token dalla query (per <img>/<video>/download).
+- allow_query_token: legge il token dalla query (per <img>/<video>/download);
+- trasporto bearer: login/refresh/logout funzionano senza cookie;
+- cleanup al login: butta le sessioni scadute, tiene le lapidi revocate.
 """
 
+import pytz
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 
+import jwt
 import pytest
 from flask import Flask
 
 import api.users.auth as auth_module
 from api.users.auth import build_auth, create_access_token, REFRESH_COOKIE_NAME
+from api.users.setup import DECODE_JWT_TOKEN
 
 
 class FakeStore:
@@ -50,6 +58,10 @@ class FakeStore:
   def get_by_params(self, model, params_list):
     return [row for row in self.rows if all(getattr(row, key) == value for key, value in params_list)]
 
+  def delete_bulk(self, instances):
+    for instance in instances:
+      self.rows.remove(instance)
+
 
 USERS = {1: SimpleNamespace(id=1, role='admin')}
 
@@ -60,6 +72,7 @@ def store(monkeypatch):
   monkeypatch.setattr(auth_module, 'create', fake.create)
   monkeypatch.setattr(auth_module, 'update', fake.update)
   monkeypatch.setattr(auth_module, 'get_by_params', fake.get_by_params)
+  monkeypatch.setattr(auth_module, 'delete_bulk', fake.delete_bulk)
   return fake
 
 
@@ -177,3 +190,98 @@ def test_query_token_read_when_enabled(app):
   assert app.get(f'/media?token={token}').get_json()['status'] == 'ok'
   # Senza query token l'endpoint media resta chiuso.
   assert app.get('/media').status_code == 401
+
+
+def test_query_token_tolerates_the_bearer_prefix(app):
+  # Chi costruisce l'URL di un media parte dallo stesso valore che userebbe
+  # nell'header: un `Bearer ` di troppo non deve invalidare il token.
+  token = create_access_token(1, 'admin')
+  assert app.get(f'/media?token=Bearer {token}').get_json()['status'] == 'ok'
+
+
+def test_query_token_endpoint_accepts_the_header_too(app):
+  # La query e' un ripiego per <img>/download: l'header deve continuare a
+  # funzionare, altrimenti quegli endpoint non sono chiamabili via fetch.
+  token = create_access_token(1, 'admin')
+  assert app.get('/media', headers={'Authorization': f'Bearer {token}'}).get_json()['status'] == 'ok'
+
+
+def test_token_without_sub_is_401_not_500(app):
+  # Un token firmato col nostro segreto ma di formato vecchio (claim `email`
+  # invece di `sub`) e' solo un token che non vale piu': non deve diventare un
+  # errore 500 con conseguente report d'errore.
+  legacy = jwt.encode(
+    {'email': 'chi@esempio.it', 'exp': (datetime.now(pytz.utc) + timedelta(hours=1)).timestamp()},
+    DECODE_JWT_TOKEN,
+    algorithm='HS256',
+  )
+  r = app.get('/admin', headers={'Authorization': legacy})
+  assert r.status_code == 401
+  assert r.get_json()['status'] == 'session'
+
+
+def test_replay_revokes_every_session_of_the_user(app, store):
+  # Due sessioni attive (due dispositivi), poi il replay di un refresh gia'
+  # ruotato su uno dei due: non sapendo chi dei due sia il ladro, si chiude
+  # tutto e si obbliga al login.
+  first = _refresh_cookie(app.post('/login'))
+  other = _refresh_cookie(app.post('/login'))
+  app.set_cookie(REFRESH_COOKIE_NAME, first)
+  app.post('/refresh')
+
+  app.set_cookie(REFRESH_COOKIE_NAME, first)
+  assert app.post('/refresh').status_code == 401
+
+  app.set_cookie(REFRESH_COOKIE_NAME, other)
+  assert app.post('/refresh').status_code == 401
+  assert all(row.revoked for row in store.rows)
+
+
+def test_revoke_user_sessions_closes_the_active_ones(app, auth):
+  cookie = _refresh_cookie(app.post('/login'))
+  assert auth.revoke_user_sessions(1) == 1
+
+  app.set_cookie(REFRESH_COOKIE_NAME, cookie)
+  assert app.post('/refresh').status_code == 401
+
+
+def test_bearer_transport_returns_refresh_in_body_without_cookie(app):
+  # Un client nativo dichiara il trasporto e si prende il refresh token nel
+  # body: nessun cookie da gestire, nessun SameSite di mezzo.
+  r = app.post('/login', headers={'X-Auth-Transport': 'bearer'})
+  body = r.get_json()
+  assert body['access_token'] and body['refresh_token']
+  assert _refresh_cookie(r) is None
+
+
+def test_bearer_transport_refreshes_and_rotates_from_body(app):
+  first = app.post('/login', headers={'X-Auth-Transport': 'bearer'}).get_json()['refresh_token']
+  r = app.post('/refresh', json={'refresh_token': first})
+  second = r.get_json()['refresh_token']
+  assert r.status_code == 200
+  assert second and second != first
+  # Anche sul canale bearer il token ruotato non vale piu'.
+  assert app.post('/refresh', json={'refresh_token': first}).status_code == 401
+
+
+def test_bearer_transport_logout_revokes(app):
+  raw = app.post('/login', headers={'X-Auth-Transport': 'bearer'}).get_json()['refresh_token']
+  app.post('/logout', json={'refresh_token': raw})
+  assert app.post('/refresh', json={'refresh_token': raw}).status_code == 401
+
+
+def test_login_cleans_up_only_expired_sessions(app, store):
+  # Le lapidi revocate ma non scadute vanno tenute: sono cio' che permette di
+  # riconoscere un replay. Solo le righe scadute si possono buttare.
+  cookie = _refresh_cookie(app.post('/login'))
+  app.set_cookie(REFRESH_COOKIE_NAME, cookie)
+  app.post('/refresh')
+  tombstones = [row for row in store.rows if row.revoked]
+  assert tombstones
+
+  app.post('/login')
+  assert [row for row in store.rows if row.revoked] == tombstones
+
+  tombstones[0].expires_at = datetime.now(pytz.utc) - timedelta(days=1)
+  app.post('/login')
+  assert tombstones[0] not in store.rows
