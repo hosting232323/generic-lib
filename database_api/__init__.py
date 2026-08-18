@@ -1,6 +1,7 @@
 import enum
 import traceback
 from zoneinfo import ZoneInfo
+from contextvars import ContextVar
 from contextlib import contextmanager
 from datetime import datetime, date, time
 from sqlalchemy.orm import sessionmaker, declarative_base
@@ -11,6 +12,7 @@ from .alembic_migration_check import alembic_migration_check
 
 engine = None
 Base = declarative_base()
+_scope: ContextVar[dict] = ContextVar('database_api_scope', default=None)
 
 
 def set_database(url: str, pool_size: int = 5, max_overflow: int = 10):
@@ -22,11 +24,28 @@ def set_database(url: str, pool_size: int = 5, max_overflow: int = 10):
   return engine
 
 
+def current_scope() -> dict:
+  return _scope.get() or {}
+
+
+@contextmanager
+def scope(**values):
+  # Valori ribaltati su session.info di ogni Session aperta nel contesto corrente.
+  # Serve a passare dati trasversali (es. il tenant attivo) agli event listener
+  # senza farli attraversare ogni firma di funzione.
+  token = _scope.set({**current_scope(), **values})
+  try:
+    yield
+  finally:
+    _scope.reset(token)
+
+
 @contextmanager
 def Session():
   if engine is None:
     raise Exception('Database engine not initialized')
   session = sessionmaker(bind=engine, expire_on_commit=False)()
+  session.info.update(current_scope())
   try:
     yield session
   except Exception as e:
