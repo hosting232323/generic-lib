@@ -1,7 +1,7 @@
 stages:
-  - lint
+  - housekeeping
   - test
 
 include:
-  - local: 'gitlab/lint.yml'
+  - local: 'gitlab/housekeeping.yml'
   - local: 'gitlab/test.yml'

@@ -5,6 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "generic_lib"
 version = "4.9.1"
+requires-python = ">=3.11"
 authors = [{ name = "GioVanni", email = "colasanto.giovanni.inf@gmail.com" }]
 dependencies = [
   "SQLAlchemy",
@@ -27,7 +28,7 @@ dependencies = [
 [project.optional-dependencies]
 unix = ["psycopg2-binary"]
 win = ["psycopg2"]
-dev = ["pytest", "build"]
+dev = ["pytest", "build", "ruff"]
 
 [project.scripts]
 db_export = "console_scripts:db_export"

@@ -1,11 +1,13 @@
 import os
+import errno
+import shutil
 import threading
 import subprocess
 from urllib.parse import urlparse
 from datetime import datetime, timedelta
 
 from api.telegram import send_telegram_message
-from api.settings import BACKUP_DAYS, BACKUP_FOLDER, POSTGRES_DOCKER_CONTAINER
+from api.settings import BACKUP_DAYS, BACKUP_FOLDER, POSTGRES_DOCKER_CONTAINER, PROJECT_NAME
 from api.storage import upload_file, get_all_filenames, delete_file
 
 
@@ -13,6 +15,14 @@ PG_DUMP_FLAGS = ['--blobs', '--clean', '-Fc', '--verbose']
 PG_RESTORE_FLAGS = ['--verbose', '--no-privileges', '--no-owner']
 BACKUP_EXTENSION = '.dump'
 BACKUP_DATE_FORMAT = '%y%m%d%H%M%S'
+DISK_FULL_MARKERS = ('no space left on device', 'disk quota exceeded', 'quota exceeded')
+BACKUP_FALLBACK_ROOT = '/opt/db-backup-fallback'
+BACKUP_DISK_THRESHOLD = 90
+BACKUP_FALLBACK_FOLDER = os.path.join(BACKUP_FALLBACK_ROOT, PROJECT_NAME)
+
+
+class LocalDiskAlmostFullError(Exception):
+  """Il disco del sistema operativo ha superato la soglia: il dump non parte."""
 
 
 def data_export(db_url: str):
@@ -63,30 +73,159 @@ def data_import(db_url: str, filename: str):
 
 def db_backup(db_url: str, server=None):
   def run():
+    filename = None
     try:
       if not BACKUP_FOLDER:
         raise ValueError('BACKUP_FOLDER non configurata')
 
+      check_local_disk_usage()
+
       filename = data_export(db_url)
-      with open(filename, 'rb') as content:
-        upload_file(content, filename, BACKUP_FOLDER, server, 'postgres-backup', True)
+      upload_backup(filename, server)
       delete_file(filename, '', ignore_dev=True)
 
       cleanup_old_backups(server)
 
-    except subprocess.CalledProcessError as e:
-      send_telegram_message(
-        '\n'.join(
-          [
-            f'**📦 DB Backup Fallito**\n▶️ `{db_url}`\n',
-            f'**❌ Errore durante il backup ({"server" if server else "local"}):**',
-            f'`{e.stderr.strip() or e.stdout.strip() or str(e)}`',
-          ]
-        )
-      )
+    except Exception as e:
+      report_failed_backup(db_url, e, filename, server)
 
   thread = threading.Thread(target=run, daemon=True)
   thread.start()
+
+
+def upload_backup(file_path: str, server=None):
+  with open(file_path, 'rb') as content:
+    upload_file(content, os.path.basename(file_path), BACKUP_FOLDER, server, 'postgres-backup', True)
+
+
+def check_local_disk_usage():
+  """Blocca il backup quando il disco della macchina e' quasi pieno.
+
+  Il dump nasce sempre qui, sul sistema operativo che ospita anche Postgres e
+  gli altri servizi, e qui resta finche' non e' stato trasferito; senza `server`
+  qui c'e' pure il ripiego, in BACKUP_FALLBACK_FOLDER. Riempire questo disco non
+  fa perdere solo il backup ma la macchina, quindi sopra BACKUP_DISK_THRESHOLD
+  si salta il giro e si avvisa, invece di produrre un dump che il disco non
+  regge.
+  """
+  for path in local_disk_paths():
+    used_percent, free = disk_usage(path)
+    if used_percent < BACKUP_DISK_THRESHOLD:
+      continue
+
+    raise LocalDiskAlmostFullError(
+      f'Disco locale al {used_percent:.1f}% su "{path}" '
+      f'(soglia {BACKUP_DISK_THRESHOLD}%, {format_size(free)} liberi): dump non avviato.'
+    )
+
+
+def local_disk_paths() -> list:
+  """Percorsi da controllare: dove finisce il dump e dove finirebbe il fallback.
+
+  Sono quasi sempre lo stesso filesystem, ma il fallback puo' stare su un mount
+  a parte. I duplicati si scartano per device, cosi' il controllo non ripete lo
+  stesso disco due volte. La root del fallback serve per il caso in cui quel
+  mount esista ma la sottocartella del progetto non sia ancora stata creata.
+  """
+  paths = []
+  seen = set()
+
+  for path in (os.getcwd(), BACKUP_FALLBACK_FOLDER, BACKUP_FALLBACK_ROOT):
+    if not os.path.isdir(path):
+      continue
+
+    device = os.stat(path).st_dev
+    if device in seen:
+      continue
+
+    seen.add(device)
+    paths.append(path)
+
+  return paths
+
+
+def disk_usage(path: str) -> tuple:
+  usage = shutil.disk_usage(path)
+  return usage.used / usage.total * 100, usage.free
+
+
+def format_size(size: int) -> str:
+  return f'{size / 1024**3:.1f} GB'
+
+
+def report_failed_backup(db_url: str, error: Exception, file_path: str = None, server=None):
+  title = '**📦 DB Backup Fallito**'
+  label = '**❌ Errore durante il backup'
+  if isinstance(error, LocalDiskAlmostFullError):
+    title = '**📦 DB Backup Bloccato — disco della macchina quasi pieno**'
+    label = '**🛑 Backup non avviato'
+  elif is_disk_full(error):
+    title = '**📦 DB Backup Fallito — spazio esaurito**'
+
+  message = [
+    f'{title}\n▶️ `{db_url}`\n',
+    f'{label} ({"server" if server else "local"}):**',
+    f'`{error_details(error)}`',
+  ]
+
+  if file_path and os.path.exists(file_path):
+    message.append(keep_dump(file_path, server))
+
+  send_telegram_message('\n'.join(message))
+
+
+def keep_dump(file_path: str, server=None) -> str:
+  """Mette al riparo il dump appena prodotto: e' l'unica copia esistente.
+
+  La cartella di ripiego e' sempre quella della macchina che ospita i backup:
+  con `server` e' quella remota, dove il dump sta accanto alla destinazione e si
+  va a cercarlo per un restore; senza, e' questa macchina. Il disco che regge
+  Postgres e gli altri servizi non e' un ripiego: se i backup vivono altrove, li'
+  il dump non ci resta.
+
+  Il dump poi non si muove piu': quando l'hdd torna ad avere spazio sono i backup
+  nuovi a riprendere la strada giusta, i vecchi restano nel ripiego. Sono gia' al
+  sicuro, e rimetterli in circolo vorrebbe dire trasferimenti e notifiche in piu'
+  per un file che nessuno sta cercando li'.
+  """
+  try:
+    where = 'sulla macchina di backup' if server else 'nella cartella di ripiego'
+    return f'\n**💾 Dump tenuto {where}:** `{park_dump(file_path, server)}`'
+
+  except Exception as e:
+    return (
+      f'\n**🛑 Dump non messo al sicuro:** `{BACKUP_FALLBACK_FOLDER}` non raggiungibile'
+      f'\n`{error_details(e)}`'
+      f'\nIl dump resta su questa macchina in `{file_path}`.'
+    )
+
+
+def park_dump(file_path: str, server=None) -> str:
+  if not server:
+    os.makedirs(BACKUP_FALLBACK_FOLDER, exist_ok=True)
+    return shutil.move(file_path, os.path.join(BACKUP_FALLBACK_FOLDER, os.path.basename(file_path)))
+
+  with open(file_path, 'rb') as content:
+    fallback_path = upload_file(content, os.path.basename(file_path), BACKUP_FALLBACK_ROOT, server, PROJECT_NAME, True)
+
+  os.remove(file_path)
+  return fallback_path
+
+
+def is_disk_full(error: Exception) -> bool:
+  if isinstance(error, OSError) and error.errno in (errno.ENOSPC, errno.EDQUOT):
+    return True
+
+  details = error_details(error).lower()
+  return any(marker in details for marker in DISK_FULL_MARKERS)
+
+
+def error_details(error: Exception) -> str:
+  if not isinstance(error, subprocess.CalledProcessError):
+    return str(error)
+
+  output = (error.stderr or error.stdout or '').strip()
+  return output or f"Il comando e' terminato con codice di uscita {error.returncode}"
 
 
 def cleanup_old_backups(server=None):
