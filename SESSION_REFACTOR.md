@@ -160,6 +160,22 @@ Ordinati per gravità.
 >
 > Il DB non contiene più password reversibili. Il rischio critico è **chiuso**.
 
+### ✅ RISOLTO — replay concorrente con piu' schede aperte
+
+> La reuse detection, da sola, sloggiava l'utente ovunque nel caso piu' normale:
+> due schede aperte scoprono l'access token scaduto nello stesso momento e
+> chiamano `/refresh` con lo stesso cookie. La seconda arrivava con un token
+> gia' ruotato e veniva letta come furto.
+>
+> Introdotta una **finestra di grazia** (`REFRESH_GRACE_SECONDS`, default 30s):
+> un refresh revocato **dalla rotazione** da pochi secondi non e' un replay, e
+> alla seconda scheda viene data una sessione sua. Fuori dalla finestra, e per i
+> token revocati da logout o reset password, vale la reuse detection piena.
+>
+> Distinzione portata dalla colonna `user_session.rotated_at` (migration 051):
+> e' valorizzata solo dalla rotazione. `build_auth` la legge con `getattr`,
+> quindi i progetti il cui modello non ce l'ha si comportano come prima.
+
 ### 🟠 MEDIO — AES-CBC senza autenticazione (legacy)
 `legacy_encrypt` usa **AES-CBC senza MAC**: cifratura malleabile. È solo un ponte di migrazione (verifica delle vecchie password al primo login) e sparisce con la dismissione di `legacy.py`. `legacy_decrypt` è già stata rimossa.
 

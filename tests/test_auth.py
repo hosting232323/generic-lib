@@ -122,6 +122,17 @@ def _refresh_cookie(response):
   return None
 
 
+def _age_rotations(store):
+  """Invecchia le rotazioni oltre la finestra di grazia.
+
+  Entro la grazia un token gia' ruotato che riappare e' due schede aperte;
+  fuori, e' un replay. I test sul replay devono quindi guardare al dopo.
+  """
+  for row in store.rows:
+    if getattr(row, 'rotated_at', None):
+      row.rotated_at = datetime.now(pytz.utc) - timedelta(hours=1)
+
+
 def test_login_returns_access_token_and_sets_httponly_cookie(app):
   r = app.post('/login')
   body = r.get_json()
@@ -140,10 +151,11 @@ def test_refresh_rotates_the_token(app):
   assert second and second != first
 
 
-def test_replay_of_rotated_token_is_rejected(app):
+def test_replay_of_rotated_token_is_rejected(app, store):
   first = _refresh_cookie(app.post('/login'))
   app.set_cookie(REFRESH_COOKIE_NAME, first)
   app.post('/refresh')
+  _age_rotations(store)
   # Riuso del vecchio refresh (gia' ruotato): non deve piu' valere.
   app.set_cookie(REFRESH_COOKIE_NAME, first)
   r = app.post('/refresh')
@@ -220,6 +232,52 @@ def test_token_without_sub_is_401_not_500(app):
   assert r.get_json()['status'] == 'session'
 
 
+def test_two_tabs_refreshing_together_both_survive(app, store):
+  """Il caso normale di due schede aperte non deve sloggiare l'utente.
+
+  Entrambe scoprono l'access token scaduto e chiamano /refresh con lo stesso
+  cookie. La seconda arriva con un token gia' ruotato: dentro la finestra di
+  grazia e' un doppione innocuo, non un furto.
+  """
+  first = _refresh_cookie(app.post('/login'))
+
+  app.set_cookie(REFRESH_COOKIE_NAME, first)
+  tab_one = app.post('/refresh')
+  app.set_cookie(REFRESH_COOKIE_NAME, first)
+  tab_two = app.post('/refresh')
+
+  assert tab_one.status_code == 200
+  assert tab_two.status_code == 200
+  assert _refresh_cookie(tab_one) != _refresh_cookie(tab_two)
+  # Ognuna prosegue con la propria sessione, nessuna revoca a tappeto.
+  assert len([row for row in store.rows if not row.revoked]) == 2
+
+
+def test_replay_after_the_grace_window_still_revokes_everything(app, store):
+  first = _refresh_cookie(app.post('/login'))
+  app.set_cookie(REFRESH_COOKIE_NAME, first)
+  app.post('/refresh')
+
+  # La rotazione risale a ben oltre la finestra: ora e' un replay vero.
+  _age_rotations(store)
+
+  app.set_cookie(REFRESH_COOKIE_NAME, first)
+  assert app.post('/refresh').status_code == 401
+  assert all(row.revoked for row in store.rows)
+
+
+def test_logout_gets_no_grace(app, store):
+  # La grazia vale solo per la rotazione: un token revocato dal logout che
+  # riappare resta un replay a tutti gli effetti.
+  cookie = _refresh_cookie(app.post('/login'))
+  app.set_cookie(REFRESH_COOKIE_NAME, cookie)
+  app.post('/logout')
+
+  app.set_cookie(REFRESH_COOKIE_NAME, cookie)
+  assert app.post('/refresh').status_code == 401
+  assert all(row.revoked for row in store.rows)
+
+
 def test_replay_revokes_every_session_of_the_user(app, store):
   # Due sessioni attive (due dispositivi), poi il replay di un refresh gia'
   # ruotato su uno dei due: non sapendo chi dei due sia il ladro, si chiude
@@ -228,6 +286,7 @@ def test_replay_revokes_every_session_of_the_user(app, store):
   other = _refresh_cookie(app.post('/login'))
   app.set_cookie(REFRESH_COOKIE_NAME, first)
   app.post('/refresh')
+  _age_rotations(store)
 
   app.set_cookie(REFRESH_COOKIE_NAME, first)
   assert app.post('/refresh').status_code == 401
@@ -254,13 +313,14 @@ def test_bearer_transport_returns_refresh_in_body_without_cookie(app):
   assert _refresh_cookie(r) is None
 
 
-def test_bearer_transport_refreshes_and_rotates_from_body(app):
+def test_bearer_transport_refreshes_and_rotates_from_body(app, store):
   first = app.post('/login', headers={'X-Auth-Transport': 'bearer'}).get_json()['refresh_token']
   r = app.post('/refresh', json={'refresh_token': first})
   second = r.get_json()['refresh_token']
   assert r.status_code == 200
   assert second and second != first
-  # Anche sul canale bearer il token ruotato non vale piu'.
+  # Anche sul canale bearer il token ruotato non vale piu', passata la grazia.
+  _age_rotations(store)
   assert app.post('/refresh', json={'refresh_token': first}).status_code == 401
 
 

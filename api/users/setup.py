@@ -15,6 +15,11 @@ REFRESH_COOKIE_NAME = os.environ.get('REFRESH_COOKIE_NAME', 'refresh_token')
 # detection: abbastanza da coprire il replay di un token appena rubato, non
 # tanto da far crescere la tabella senza motivo.
 REFRESH_TOMBSTONE_DAYS = int(os.environ.get('REFRESH_TOMBSTONE_DAYS', 7))
+# Finestra entro cui il refresh appena ruotato e' ancora spendibile. Serve al
+# caso normale di due schede aperte: entrambe scoprono l'access token scaduto e
+# chiamano /refresh con lo stesso cookie: la seconda arriva con un token gia'
+# ruotato senza che nessuno abbia rubato niente.
+REFRESH_GRACE_SECONDS = int(os.environ.get('REFRESH_GRACE_SECONDS', 30))
 
 
 class User(BaseEntity):

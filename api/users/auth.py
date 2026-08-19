@@ -15,6 +15,7 @@ from .setup import (
   REFRESH_TOKEN_DAYS,
   REFRESH_COOKIE_NAME,
   REFRESH_TOMBSTONE_DAYS,
+  REFRESH_GRACE_SECONDS,
 )
 
 
@@ -38,6 +39,18 @@ def _tombstone_expiry():
   # Una riga revocata resta come lapide: serve solo a riconoscere il replay di
   # un refresh gia' speso, quindi ha una vita molto piu' corta di una sessione.
   return _now() + timedelta(days=REFRESH_TOMBSTONE_DAYS)
+
+
+def _within_grace(session) -> bool:
+  """La sessione e' stata ruotata da pochissimo?
+
+  `rotated_at` e' opzionale: i progetti il cui modello non ha ancora la colonna
+  si comportano come prima (nessuna grazia, replay = revoca di tutto).
+  """
+  rotated_at = getattr(session, 'rotated_at', None)
+  if not rotated_at:
+    return False
+  return (_now() - _aware(rotated_at)).total_seconds() <= REFRESH_GRACE_SECONDS
 
 
 def _hash_refresh(raw: str) -> str:
@@ -174,11 +187,23 @@ def build_auth(session_model, get_user_by_id):
       return jsonify({'status': 'session', 'message': 'Sessione non valida'}), 401
 
     if session.revoked:
-      # Reuse detection. Questo refresh e' gia' stato speso (ruotato) o
-      # revocato, eppure qualcuno lo ripresenta: o e' una copia rubata, o e' il
-      # legittimo proprietario a cui l'hanno rubata e ruotata sotto il naso. Da
-      # qui non sappiamo distinguere i due, quindi chiudiamo tutto e
-      # costringiamo al login: e' l'unico esito che non lascia dentro il ladro.
+      if _within_grace(session):
+        # Due schede (o due richieste partite insieme) hanno scoperto l'access
+        # token scaduto nello stesso momento e chiamano /refresh con lo stesso
+        # cookie: la seconda arriva con un token appena ruotato. E' il caso
+        # normale, non un furto, e trattarlo come replay sloggherebbe l'utente
+        # ovunque ogni volta che tiene aperte due schede. Le diamo una sessione
+        # sua invece di chiudere tutto.
+        user = get_user_by_id(session.user_id)
+        if not user:
+          return jsonify({'status': 'session', 'message': 'Utente non trovato'}), 401
+        return _token_response(user, _issue_refresh(session.user_id), use_cookie=use_cookie)
+
+      # Reuse detection. Fuori dalla finestra di grazia, un refresh gia' speso
+      # che riappare e' o una copia rubata, o il legittimo proprietario a cui
+      # l'hanno rubata e ruotata sotto il naso. Da qui non sappiamo distinguere
+      # i due, quindi chiudiamo tutto e costringiamo al login: e' l'unico esito
+      # che non lascia dentro il ladro.
       revoke_user_sessions(session.user_id)
       return jsonify({'status': 'session', 'message': 'Sessione non valida'}), 401
 
@@ -191,7 +216,9 @@ def build_auth(session_model, get_user_by_id):
       return jsonify({'status': 'session', 'message': 'Utente non trovato'}), 401
 
     # Rotazione: la riga vecchia diventa lapide, il token nuovo nasce sulla sua.
-    update(session, {'revoked': True, 'expires_at': _tombstone_expiry()})
+    # rotated_at distingue "revocata perche' ruotata" da "revocata da logout o
+    # reset password": solo la prima ha diritto alla finestra di grazia.
+    update(session, {'revoked': True, 'rotated_at': _now(), 'expires_at': _tombstone_expiry()})
     return _token_response(user, _issue_refresh(session.user_id), use_cookie=use_cookie)
 
   def logout():
