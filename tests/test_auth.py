@@ -248,9 +248,45 @@ def test_two_tabs_refreshing_together_both_survive(app, store):
 
   assert tab_one.status_code == 200
   assert tab_two.status_code == 200
-  assert _refresh_cookie(tab_one) != _refresh_cookie(tab_two)
-  # Ognuna prosegue con la propria sessione, nessuna revoca a tappeto.
-  assert len([row for row in store.rows if not row.revoked]) == 2
+  # La seconda riceve un access token ma NESSUN cookie nuovo: prosegue con il
+  # refresh che la prima ha gia' messo nel barattolo condiviso.
+  assert tab_two.get_json()['access_token']
+  assert _refresh_cookie(tab_two) is None
+  # E soprattutto non nascono sessioni in piu': una sola viva, quella ruotata.
+  assert len([row for row in store.rows if not row.revoked]) == 1
+
+
+def test_grace_never_mints_new_sessions_however_often_it_is_replayed(app, store):
+  """Un token gia' speso non deve poter generare sessioni, nemmeno in grazia.
+
+  Altrimenti chi lo ruba lo rigioca a ripetizione per tutta la finestra e si
+  costruisce una sessione per volta, aggirando proprio la reuse detection.
+  """
+  first = _refresh_cookie(app.post('/login'))
+  app.set_cookie(REFRESH_COOKIE_NAME, first)
+  app.post('/refresh')
+  live_before = len([row for row in store.rows if not row.revoked])
+
+  for _ in range(5):
+    app.set_cookie(REFRESH_COOKIE_NAME, first)
+    replay = app.post('/refresh')
+    assert replay.status_code == 200
+    assert _refresh_cookie(replay) is None
+
+  assert len([row for row in store.rows if not row.revoked]) == live_before
+
+
+def test_grace_does_not_apply_once_the_chain_is_dead(app, store):
+  # Dopo un logout non c'e' nessuna corsa fra schede da giustificare: un token
+  # che riappare, anche appena ruotato, e' un replay.
+  first = _refresh_cookie(app.post('/login'))
+  app.set_cookie(REFRESH_COOKIE_NAME, first)
+  rotated = _refresh_cookie(app.post('/refresh'))
+  app.set_cookie(REFRESH_COOKIE_NAME, rotated)
+  app.post('/logout')
+
+  app.set_cookie(REFRESH_COOKIE_NAME, first)
+  assert app.post('/refresh').status_code == 401
 
 
 def test_replay_after_the_grace_window_still_revokes_everything(app, store):

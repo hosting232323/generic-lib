@@ -130,6 +130,18 @@ def build_auth(session_model, get_user_by_id):
     sessions = get_by_params(session_model, [('token_hash', _hash_refresh(raw))])
     return sessions[0] if sessions else None
 
+  def _has_live_session(user_id) -> bool:
+    """Esiste ancora una sessione viva per questo utente?
+
+    La grazia ha senso solo se la catena legittima e' in piedi. Se l'utente ha
+    fatto logout o gli e' stata resettata la password, non c'e' nessuna corsa
+    fra schede da giustificare: un token che riappare e' un replay.
+    """
+    return any(
+      not row.revoked and _aware(row.expires_at) >= _now()
+      for row in get_by_params(session_model, [('user_id', user_id)])
+    )
+
   def revoke_user_sessions(user_id) -> int:
     """Chiude tutte le sessioni attive di un utente.
 
@@ -187,17 +199,27 @@ def build_auth(session_model, get_user_by_id):
       return jsonify({'status': 'session', 'message': 'Sessione non valida'}), 401
 
     if session.revoked:
-      if _within_grace(session):
+      if _within_grace(session) and _has_live_session(session.user_id):
         # Due schede (o due richieste partite insieme) hanno scoperto l'access
         # token scaduto nello stesso momento e chiamano /refresh con lo stesso
         # cookie: la seconda arriva con un token appena ruotato. E' il caso
         # normale, non un furto, e trattarlo come replay sloggherebbe l'utente
-        # ovunque ogni volta che tiene aperte due schede. Le diamo una sessione
-        # sua invece di chiudere tutto.
+        # ovunque ogni volta che tiene aperte due schede.
+        #
+        # Qui NON si emette una sessione nuova. Un token gia' speso non puo'
+        # generarne altre: se lo facesse, chi lo ha rubato potrebbe riusarlo a
+        # ripetizione per tutta la finestra creando una sessione per volta, e
+        # anche il caso legittimo lascerebbe in giro sessioni orfane. Si
+        # restituisce solo un access token, senza toccare il cookie: il
+        # chiamante prosegue col refresh che la rotazione ha gia' messo nel
+        # barattolo dei cookie, che nel browser e' condiviso fra le schede.
+        #
+        # Il replay resta cosi' limitato a un access token di breve durata e
+        # non consente in nessun caso di ottenere persistenza.
         user = get_user_by_id(session.user_id)
         if not user:
           return jsonify({'status': 'session', 'message': 'Utente non trovato'}), 401
-        return _token_response(user, _issue_refresh(session.user_id), use_cookie=use_cookie)
+        return jsonify({'status': 'ok', 'access_token': create_access_token(user.id, getattr(user, 'role', None))})
 
       # Reuse detection. Fuori dalla finestra di grazia, un refresh gia' speso
       # che riappare e' o una copia rubata, o il legittimo proprietario a cui

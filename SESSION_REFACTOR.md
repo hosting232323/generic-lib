@@ -172,6 +172,14 @@ Ordinati per gravità.
 > alla seconda scheda viene data una sessione sua. Fuori dalla finestra, e per i
 > token revocati da logout o reset password, vale la reuse detection piena.
 >
+> Durante la grazia **non viene emessa nessuna sessione nuova**: si restituisce
+> solo un access token, senza toccare il cookie. Emetterne una permetterebbe a
+> chi ha rubato il token di rigiocarlo per tutta la finestra creando una
+> sessione per volta, e lascerebbe sessioni orfane anche nel caso legittimo. La
+> grazia si applica inoltre solo se l'utente ha ancora una sessione viva: dopo
+> un logout o un reset password non c'e' nessuna corsa fra schede da
+> giustificare.
+>
 > Distinzione portata dalla colonna `user_session.rotated_at` (migration 051):
 > e' valorizzata solo dalla rotazione. `build_auth` la legge con `getattr`,
 > quindi i progetti il cui modello non ce l'ha si comportano come prima.
