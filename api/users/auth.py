@@ -5,6 +5,7 @@ import uuid
 import hashlib
 import secrets
 from functools import wraps
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from flask import g, request, jsonify, make_response
 
@@ -97,46 +98,69 @@ def _read_access_token():
   return _strip_bearer(request.headers.get('Authorization', '')) or None
 
 
-def build_auth(session_model, get_user_by_id):
+def build_auth(session_model, get_user_by_id, user_model=None):
   """Costruisce il sistema access/refresh per un progetto.
 
-  - session_model: entita' con user_id, token_hash, expires_at, revoked
+  - session_model: entita' con user_id, token_hash, expires_at, revoked,
+    rotated_at, family_id
   - get_user_by_id: funzione (id) -> user, con attributi id e role
+  - user_model: entita' utente, usata come punto di serializzazione stabile fra
+    login, refresh, logout e reset password. Omettendola si perde quella
+    garanzia, non il funzionamento.
   """
 
-  def _cleanup_expired_sessions(user_id):
+  def _cleanup_expired_sessions(user_id, db=None):
     """Cancella le sessioni scadute dell'utente (lazy cleanup al login).
 
     Le righe revocate ma non ancora scadute non si toccano: sono le lapidi su
     cui si regge il riconoscimento del replay. Cancellarle renderebbe un token
     rubato indistinguibile da uno inventato.
     """
-    old = [s for s in get_by_params(session_model, [('user_id', user_id)]) if _aware(s.expires_at) < _now()]
+    rows = (
+      db.query(session_model).filter(session_model.user_id == user_id).all()
+      if db is not None
+      else get_by_params(session_model, [('user_id', user_id)])
+    )
+    old = [s for s in rows if _aware(s.expires_at) < _now()]
     if old:
-      delete_bulk(old)
+      if db is not None:
+        delete_bulk(old, session=db)
+      else:
+        delete_bulk(old)
 
-  def _lock_family(db, family_id):
-    """Blocca le righe della famiglia per la durata della transazione.
+  def _lock_user(db, user_id):
+    """Serializza le operazioni di sessione dello stesso utente.
 
-    Serve a mettere in fila refresh e logout sulla stessa catena: senza, un
-    logout puo' passare fra la rotazione e la nascita del successore, e il
-    successore sopravviverebbe al logout.
+    Il lock deve stare su una riga **stabile**. Bloccare le righe di sessione
+    non basta: FOR UPDATE blocca quelle viste dalla query, non impedisce a una
+    rotazione concorrente di inserirne una nuova, e il successore appena nato
+    sfuggirebbe alla revoca. La riga utente invece c'e' sempre ed e' la stessa
+    per login, refresh, logout e reset password, che e' esattamente l'insieme
+    di operazioni da mettere in fila.
 
-    SQLite non conosce FOR UPDATE, ma serializza gia' le scritture per conto
-    suo, quindi li' il lock esplicito si salta.
+    Senza user_model (progetto non ancora aggiornato) si prosegue senza lock,
+    col comportamento di prima. Su SQLite si salta: le scritture sono gia'
+    serializzate e FOR UPDATE non esiste.
     """
-    if not family_id:
-      return []
-    query = db.query(session_model).filter(session_model.family_id == family_id)
-    if db.bind.dialect.name != 'sqlite':
-      query = query.with_for_update()
-    return query.all()
+    if user_model is None or db.bind.dialect.name == 'sqlite':
+      return
+    db.query(user_model).filter(user_model.id == user_id).with_for_update().first()
+
+  def _revoke_where(db, *conditions) -> int:
+    """Revoca in un solo statement, cosi' vede tutto cio' che e' committato.
+
+    Una lista di righe letta prima del lock sarebbe gia' vecchia quando la si
+    usa: l'UPDATE per condizione, eseguito dopo il lock, prende anche le righe
+    nate nel frattempo.
+    """
+    return (
+      db.query(session_model)
+      .filter(session_model.revoked.is_(False), *conditions)
+      .update({'revoked': True, 'expires_at': _tombstone_expiry()}, synchronize_session=False)
+    )
 
   def _revoke_family_rows(db, family_id) -> int:
-    rows = [row for row in _lock_family(db, family_id) if not row.revoked]
-    for row in rows:
-      update(row, {'revoked': True, 'expires_at': _tombstone_expiry()}, session=db)
-    return len(rows)
+    return _revoke_where(db, session_model.family_id == family_id)
 
   def _family_has_live_row(db, family_id) -> bool:
     return any(
@@ -192,29 +216,48 @@ def build_auth(session_model, get_user_by_id):
       for row in get_by_params(session_model, [('family_id', family_id)])
     )
 
-  def _revoke_rows(rows) -> int:
-    for row in rows:
-      update(row, {'revoked': True, 'expires_at': _tombstone_expiry()})
-    return len(rows)
+  @contextmanager
+  def user_session_lock(user_id):
+    """Transazione con la riga utente bloccata, condivisibile col chiamante.
 
-  def revoke_family(family_id) -> int:
+    Serve a chi deve cambiare qualcosa dell'utente *e* chiudergli le sessioni
+    nello stesso atto: il reset password. Facendolo in due transazioni separate,
+    un refresh concorrente puo' infilarsi in mezzo e creare un successore dopo
+    la revoca, lasciando dentro proprio chi si voleva cacciare fuori.
+    """
+    with Session() as db:
+      _lock_user(db, user_id)
+      yield db
+      db.commit()
+
+  def revoke_family(family_id, db=None) -> int:
     """Chiude la catena compromessa, e solo quella.
 
     Chi ha rubato il token non ha nulla che appartenga alle altre famiglie:
     revocarle tutte non lo caccia fuori piu' di cosi', sloggia gli altri
     dispositivi dell'utente per niente.
     """
-    rows = [row for row in get_by_params(session_model, [('family_id', family_id)]) if not row.revoked]
-    return _revoke_rows(rows)
+    if db is not None:
+      return _revoke_family_rows(db, family_id)
+    with Session() as own:
+      revoked = _revoke_family_rows(own, family_id)
+      own.commit()
+      return revoked
 
-  def revoke_user_sessions(user_id) -> int:
+  def revoke_user_sessions(user_id, db=None) -> int:
     """Chiude tutte le sessioni attive di un utente.
 
     La usano il reuse detection e i progetti quando la password cambia: senza
     questa, reimpostare la password di un utente compromesso non caccia fuori
     chi gli ha rubato il refresh token, che resterebbe valido per giorni.
+
+    Passando `db` si entra nella transazione del chiamante — che deve gia'
+    tenere il lock utente, tipicamente via user_session_lock.
     """
-    return _revoke_rows([s for s in get_by_params(session_model, [('user_id', user_id)]) if not s.revoked])
+    if db is not None:
+      return _revoke_where(db, session_model.user_id == user_id)
+    with user_session_lock(user_id) as own:
+      return _revoke_where(own, session_model.user_id == user_id)
 
   def _set_cookie(response, raw: str):
     response.set_cookie(
@@ -248,8 +291,15 @@ def build_auth(session_model, get_user_by_id):
     return response
 
   def login_response(user, extra: dict = None, transport: str = None):
-    _cleanup_expired_sessions(user.id)
-    return _token_response(user, _issue_refresh(user.id), extra, _wants_cookie(transport))
+    # Anche il login passa dal lock: un reset password concorrente deve trovarsi
+    # o prima o dopo, mai in mezzo, altrimenti aprirebbe una sessione che il
+    # reset ha gia' creduto di aver chiuso.
+    with Session() as db:
+      _lock_user(db, user.id)
+      _cleanup_expired_sessions(user.id, db=db)
+      raw = _issue_refresh(user.id, db=db)
+      db.commit()
+    return _token_response(user, raw, extra, _wants_cookie(transport))
 
   def refresh():
     """Rinnova l'access token ruotando il refresh, in una sola transazione.
@@ -275,10 +325,10 @@ def build_auth(session_model, get_user_by_id):
         return invalid
 
       family_id = getattr(row, 'family_id', None)
-      # Il lock va preso prima del compare-and-swap: mette in fila anche il
-      # logout, che altrimenti potrebbe passare fra la revoca della riga vecchia
-      # e la nascita del successore.
-      _lock_family(db, family_id)
+      # Il lock va preso prima del compare-and-swap: mette in fila anche logout
+      # e reset password, che altrimenti potrebbero passare fra la revoca della
+      # riga vecchia e la nascita del successore.
+      _lock_user(db, row.user_id)
       db.refresh(row)
 
       # La scadenza si verifica qui e non nella WHERE: il confronto fra
@@ -339,9 +389,7 @@ def build_auth(session_model, get_user_by_id):
         _revoke_family_rows(db, family_id)
       else:
         # Modello senza famiglie: non sapendo quale catena sia, si chiude tutto.
-        for stale in db.query(session_model).filter(session_model.user_id == row.user_id).all():
-          if not stale.revoked:
-            update(stale, {'revoked': True, 'expires_at': _tombstone_expiry()}, session=db)
+        _revoke_where(db, session_model.user_id == row.user_id)
       db.commit()
       return invalid
 
@@ -360,11 +408,12 @@ def build_auth(session_model, get_user_by_id):
       with Session() as db:
         row = db.query(session_model).filter(session_model.token_hash == _hash_refresh(raw)).first()
         if row is not None:
+          _lock_user(db, row.user_id)
           family_id = getattr(row, 'family_id', None)
           if family_id:
             _revoke_family_rows(db, family_id)
-          elif not row.revoked:
-            update(row, {'revoked': True, 'expires_at': _tombstone_expiry()}, session=db)
+          else:
+            _revoke_where(db, session_model.id == row.id)
           db.commit()
 
     response = make_response(jsonify({'status': 'ok', 'message': 'Logout effettuato'}))
@@ -416,14 +465,19 @@ def build_auth(session_model, get_user_by_id):
 
     return wrapper
 
-  return SimpleAuth(login_response, refresh, logout, authentication, revoke_user_sessions, revoke_family)
+  return SimpleAuth(
+    login_response, refresh, logout, authentication, revoke_user_sessions, revoke_family, user_session_lock
+  )
 
 
 class SimpleAuth:
-  def __init__(self, login_response, refresh, logout, authentication, revoke_user_sessions, revoke_family):
+  def __init__(
+    self, login_response, refresh, logout, authentication, revoke_user_sessions, revoke_family, user_session_lock
+  ):
     self.login_response = login_response
     self.refresh = refresh
     self.logout = logout
     self.authentication = authentication
     self.revoke_user_sessions = revoke_user_sessions
     self.revoke_family = revoke_family
+    self.user_session_lock = user_session_lock
