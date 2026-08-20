@@ -180,7 +180,16 @@ Ordinati per gravità.
 > un logout o un reset password non c'e' nessuna corsa fra schede da
 > giustificare.
 >
-> Distinzione portata dalla colonna `user_session.rotated_at` (migration 051):
+> La grazia si valuta **sulla famiglia del token**, non sull'utente: ogni login
+> apre una famiglia, ogni rotazione vi resta dentro. Guardare le sessioni
+> dell'utente non bastava — un secondo dispositivo, con una famiglia sua, teneva
+> in vita la grazia di una catena gia' chiusa dal logout, e la richiesta
+> ritardata otteneva un access token buono. Stessa logica per la reuse
+> detection, che ora revoca la sola catena compromessa: chi ha rubato quel token
+> non possiede nulla delle altre famiglie.
+>
+> Distinzione portata dalle colonne `user_session.rotated_at` (migration 051) e
+> `user_session.family_id` (migration 052):
 > e' valorizzata solo dalla rotazione. `build_auth` la legge con `getattr`,
 > quindi i progetti il cui modello non ce l'ha si comportano come prima.
 

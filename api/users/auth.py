@@ -1,6 +1,7 @@
 import os
 import jwt
 import pytz
+import uuid
 import hashlib
 import secrets
 from functools import wraps
@@ -113,7 +114,14 @@ def build_auth(session_model, get_user_by_id):
     if old:
       delete_bulk(old)
 
-  def _issue_refresh(user_id) -> str:
+  def _issue_refresh(user_id, family_id: str = None) -> str:
+    """Emette un refresh token.
+
+    Ogni login apre una famiglia nuova; ogni rotazione resta nella famiglia da
+    cui proviene. La famiglia e' cio' che lega un token alla propria catena, e
+    quindi l'unica cosa su cui la finestra di grazia possa poggiare: sapere che
+    *l'utente* ha una sessione viva non dice niente su questa catena.
+    """
     raw = secrets.token_urlsafe(48)
     create(
       session_model,
@@ -122,6 +130,7 @@ def build_auth(session_model, get_user_by_id):
         'token_hash': _hash_refresh(raw),
         'expires_at': _now() + timedelta(days=REFRESH_TOKEN_DAYS),
         'revoked': False,
+        'family_id': family_id or str(uuid.uuid4()),
       },
     )
     return raw
@@ -130,17 +139,39 @@ def build_auth(session_model, get_user_by_id):
     sessions = get_by_params(session_model, [('token_hash', _hash_refresh(raw))])
     return sessions[0] if sessions else None
 
-  def _has_live_session(user_id) -> bool:
-    """Esiste ancora una sessione viva per questo utente?
+  def _family_is_live(family_id) -> bool:
+    """La catena a cui appartiene questo token e' ancora in piedi?
 
-    La grazia ha senso solo se la catena legittima e' in piedi. Se l'utente ha
-    fatto logout o gli e' stata resettata la password, non c'e' nessuna corsa
-    fra schede da giustificare: un token che riappare e' un replay.
+    La grazia copre un solo caso: la rotazione e' appena avvenuta e una
+    richiesta partita prima arriva col token vecchio. Ha senso, quindi, solo se
+    il successore di *quella* catena e' vivo. Guardare le sessioni dell'utente
+    non basta: un altro dispositivo, con una famiglia sua, terrebbe in vita la
+    grazia di una catena chiusa dal logout.
+
+    Senza family_id (modello di un progetto non ancora aggiornato) si risponde
+    di no: niente grazia, si torna al replay stretto.
     """
+    if not family_id:
+      return False
     return any(
       not row.revoked and _aware(row.expires_at) >= _now()
-      for row in get_by_params(session_model, [('user_id', user_id)])
+      for row in get_by_params(session_model, [('family_id', family_id)])
     )
+
+  def _revoke_rows(rows) -> int:
+    for row in rows:
+      update(row, {'revoked': True, 'expires_at': _tombstone_expiry()})
+    return len(rows)
+
+  def revoke_family(family_id) -> int:
+    """Chiude la catena compromessa, e solo quella.
+
+    Chi ha rubato il token non ha nulla che appartenga alle altre famiglie:
+    revocarle tutte non lo caccia fuori piu' di cosi', sloggia gli altri
+    dispositivi dell'utente per niente.
+    """
+    rows = [row for row in get_by_params(session_model, [('family_id', family_id)]) if not row.revoked]
+    return _revoke_rows(rows)
 
   def revoke_user_sessions(user_id) -> int:
     """Chiude tutte le sessioni attive di un utente.
@@ -149,10 +180,7 @@ def build_auth(session_model, get_user_by_id):
     questa, reimpostare la password di un utente compromesso non caccia fuori
     chi gli ha rubato il refresh token, che resterebbe valido per giorni.
     """
-    active = [s for s in get_by_params(session_model, [('user_id', user_id)]) if not s.revoked]
-    for session in active:
-      update(session, {'revoked': True, 'expires_at': _tombstone_expiry()})
-    return len(active)
+    return _revoke_rows([s for s in get_by_params(session_model, [('user_id', user_id)]) if not s.revoked])
 
   def _set_cookie(response, raw: str):
     response.set_cookie(
@@ -199,12 +227,17 @@ def build_auth(session_model, get_user_by_id):
       return jsonify({'status': 'session', 'message': 'Sessione non valida'}), 401
 
     if session.revoked:
-      if _within_grace(session) and _has_live_session(session.user_id):
+      if _within_grace(session) and _family_is_live(getattr(session, 'family_id', None)):
         # Due schede (o due richieste partite insieme) hanno scoperto l'access
         # token scaduto nello stesso momento e chiamano /refresh con lo stesso
         # cookie: la seconda arriva con un token appena ruotato. E' il caso
         # normale, non un furto, e trattarlo come replay sloggherebbe l'utente
         # ovunque ogni volta che tiene aperte due schede.
+        #
+        # La condizione e' sulla famiglia, non sull'utente: se il successore
+        # di questa catena e' stato revocato (logout, reset password) non c'e'
+        # nessuna corsa da giustificare, nemmeno se un altro dispositivo dello
+        # stesso utente ha ancora una sessione sua.
         #
         # Qui NON si emette una sessione nuova. Un token gia' speso non puo'
         # generarne altre: se lo facesse, chi lo ha rubato potrebbe riusarlo a
@@ -226,7 +259,12 @@ def build_auth(session_model, get_user_by_id):
       # l'hanno rubata e ruotata sotto il naso. Da qui non sappiamo distinguere
       # i due, quindi chiudiamo tutto e costringiamo al login: e' l'unico esito
       # che non lascia dentro il ladro.
-      revoke_user_sessions(session.user_id)
+      family_id = getattr(session, 'family_id', None)
+      if family_id:
+        revoke_family(family_id)
+      else:
+        # Modello senza famiglie: non sapendo quale catena sia, si chiude tutto.
+        revoke_user_sessions(session.user_id)
       return jsonify({'status': 'session', 'message': 'Sessione non valida'}), 401
 
     if _aware(session.expires_at) < _now():
@@ -241,7 +279,11 @@ def build_auth(session_model, get_user_by_id):
     # rotated_at distingue "revocata perche' ruotata" da "revocata da logout o
     # reset password": solo la prima ha diritto alla finestra di grazia.
     update(session, {'revoked': True, 'rotated_at': _now(), 'expires_at': _tombstone_expiry()})
-    return _token_response(user, _issue_refresh(session.user_id), use_cookie=use_cookie)
+    return _token_response(
+      user,
+      _issue_refresh(session.user_id, getattr(session, 'family_id', None)),
+      use_cookie=use_cookie,
+    )
 
   def logout():
     raw, _ = _read_refresh()
@@ -299,13 +341,14 @@ def build_auth(session_model, get_user_by_id):
 
     return wrapper
 
-  return SimpleAuth(login_response, refresh, logout, authentication, revoke_user_sessions)
+  return SimpleAuth(login_response, refresh, logout, authentication, revoke_user_sessions, revoke_family)
 
 
 class SimpleAuth:
-  def __init__(self, login_response, refresh, logout, authentication, revoke_user_sessions):
+  def __init__(self, login_response, refresh, logout, authentication, revoke_user_sessions, revoke_family):
     self.login_response = login_response
     self.refresh = refresh
     self.logout = logout
     self.authentication = authentication
     self.revoke_user_sessions = revoke_user_sessions
+    self.revoke_family = revoke_family

@@ -276,6 +276,52 @@ def test_grace_never_mints_new_sessions_however_often_it_is_replayed(app, store)
   assert len([row for row in store.rows if not row.revoked]) == live_before
 
 
+def test_grace_is_not_granted_by_another_device_of_the_same_user(app, store):
+  """La grazia deve guardare la catena, non l'utente.
+
+  Sequenza: il dispositivo A ruota, una richiesta col token vecchio resta
+  indietro, A fa logout revocando il proprio successore, ma il dispositivo B ha
+  ancora una sessione valida dello stesso utente. La richiesta ritardata di A
+  non deve essere accettata: la sua catena e' chiusa, e la sessione di B non ha
+  niente a che vedere con quella corsa.
+  """
+  device_a = _refresh_cookie(app.post('/login'))
+  app.set_cookie(REFRESH_COOKIE_NAME, device_a)
+  rotated_a = _refresh_cookie(app.post('/refresh'))
+
+  # Il dispositivo B fa un login suo: famiglia diversa, sessione viva.
+  device_b = _refresh_cookie(app.post('/login'))
+
+  app.set_cookie(REFRESH_COOKIE_NAME, rotated_a)
+  app.post('/logout')
+
+  # La richiesta ritardata di A, ancora dentro la finestra di grazia.
+  app.set_cookie(REFRESH_COOKIE_NAME, device_a)
+  delayed = app.post('/refresh')
+  assert delayed.status_code == 401
+  assert 'access_token' not in (delayed.get_json() or {})
+
+  # E la sessione di B non e' stata toccata: non era lei la catena compromessa.
+  app.set_cookie(REFRESH_COOKIE_NAME, device_b)
+  assert app.post('/refresh').status_code == 200
+
+
+def test_rotation_stays_in_the_same_family(app, store):
+  first = _refresh_cookie(app.post('/login'))
+  app.set_cookie(REFRESH_COOKIE_NAME, first)
+  app.post('/refresh')
+
+  families = {row.family_id for row in store.rows}
+  assert len(families) == 1
+
+
+def test_each_login_opens_its_own_family(app, store):
+  app.post('/login')
+  app.post('/login')
+
+  assert len({row.family_id for row in store.rows}) == 2
+
+
 def test_grace_does_not_apply_once_the_chain_is_dead(app, store):
   # Dopo un logout non c'e' nessuna corsa fra schede da giustificare: un token
   # che riappare, anche appena ruotato, e' un replay.
@@ -314,10 +360,11 @@ def test_logout_gets_no_grace(app, store):
   assert all(row.revoked for row in store.rows)
 
 
-def test_replay_revokes_every_session_of_the_user(app, store):
-  # Due sessioni attive (due dispositivi), poi il replay di un refresh gia'
-  # ruotato su uno dei due: non sapendo chi dei due sia il ladro, si chiude
-  # tutto e si obbliga al login.
+def test_replay_revokes_the_compromised_family_only(app, store):
+  # Due dispositivi, due famiglie. Il replay di un refresh gia' speso chiude la
+  # catena su cui e' avvenuto: chi ha rubato quel token non ha niente che
+  # appartenga all'altra famiglia, quindi revocarla non lo caccia fuori di piu'
+  # e sloggherebbe l'altro dispositivo per niente.
   first = _refresh_cookie(app.post('/login'))
   other = _refresh_cookie(app.post('/login'))
   app.set_cookie(REFRESH_COOKIE_NAME, first)
@@ -327,9 +374,11 @@ def test_replay_revokes_every_session_of_the_user(app, store):
   app.set_cookie(REFRESH_COOKIE_NAME, first)
   assert app.post('/refresh').status_code == 401
 
+  compromised = {row.family_id for row in store.rows if not row.revoked}
+  assert len(compromised) == 1
+
   app.set_cookie(REFRESH_COOKIE_NAME, other)
-  assert app.post('/refresh').status_code == 401
-  assert all(row.revoked for row in store.rows)
+  assert app.post('/refresh').status_code == 200
 
 
 def test_revoke_user_sessions_closes_the_active_ones(app, auth):
