@@ -490,3 +490,22 @@ def test_concurrent_rotation_leaves_a_single_live_session(app, store):
   assert _refresh_cookie(first) is not None
   assert _refresh_cookie(second) is None
   assert len(live_rows()) == 1
+
+
+def test_login_verify_runs_and_can_refuse(app, auth, store):
+  """La verifica passata al login decide se la sessione nasce.
+
+  E' il gancio che permette di controllare la password dentro il lock, nello
+  stesso atto in cui la sessione viene creata: farlo prima lascia una finestra
+  in cui un reset password concorrente cambia le credenziali e il login prosegue
+  con quelle vecchie.
+  """
+  seen = []
+  with Flask(__name__).test_request_context():
+    assert auth.login_response(USERS[1], verify=lambda fresh, db: False) is None
+    assert rows() == []
+
+    assert auth.login_response(USERS[1], verify=lambda fresh, db: seen.append(fresh.id) or True) is not None
+
+  assert seen == [1]
+  assert len(live_rows()) == 1

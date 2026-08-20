@@ -146,6 +146,16 @@ def build_auth(session_model, get_user_by_id, user_model=None):
       return
     db.query(user_model).filter(user_model.id == user_id).with_for_update().first()
 
+  def _reload_user(db, user_id):
+    """Rilegge l'utente dentro la transazione che tiene il lock.
+
+    L'istanza che il chiamante ha in mano e' stata caricata prima: se nel
+    frattempo e' passato un reset password, e' gia' vecchia.
+    """
+    if user_model is None:
+      return None
+    return db.query(user_model).filter(user_model.id == user_id).first()
+
   def _revoke_where(db, *conditions) -> int:
     """Revoca in un solo statement, cosi' vede tutto cio' che e' committato.
 
@@ -239,7 +249,14 @@ def build_auth(session_model, get_user_by_id, user_model=None):
     """
     if db is not None:
       return _revoke_family_rows(db, family_id)
+
     with Session() as own:
+      # Serve l'utente per prendere il lock: senza, un refresh concorrente
+      # infilerebbe il successore dopo la revoca, come succedeva al logout.
+      row = own.query(session_model).filter(session_model.family_id == family_id).first()
+      if row is None:
+        return 0
+      _lock_user(own, row.user_id)
       revoked = _revoke_family_rows(own, family_id)
       own.commit()
       return revoked
@@ -290,16 +307,30 @@ def build_auth(session_model, get_user_by_id, user_model=None):
       _set_cookie(response, raw)
     return response
 
-  def login_response(user, extra: dict = None, transport: str = None):
-    # Anche il login passa dal lock: un reset password concorrente deve trovarsi
-    # o prima o dopo, mai in mezzo, altrimenti aprirebbe una sessione che il
-    # reset ha gia' creduto di aver chiuso.
+  def login_response(user, extra: dict = None, transport: str = None, verify=None):
+    """Apre una sessione per l'utente.
+
+    `verify` e' una funzione (utente_riletto, transazione) -> bool eseguita
+    **dentro** il lock. Serve al login: verificare la password prima lascia una
+    finestra in cui un reset password concorrente cambia le credenziali e revoca
+    le sessioni, mentre il login prosegue con quelle vecchie e ne apre una nuova.
+    Verifica, eventuale migrazione dell'hash e nascita della sessione devono
+    essere lo stesso atto.
+
+    Se `verify` restituisce False, non viene creata nessuna sessione e la
+    risposta e' None: l'errore lo formula il chiamante, che sa cosa dire.
+    """
     with Session() as db:
       _lock_user(db, user.id)
-      _cleanup_expired_sessions(user.id, db=db)
-      raw = _issue_refresh(user.id, db=db)
+      # L'utente si rilegge dopo il lock: prima poteva essere gia' cambiato.
+      fresh = _reload_user(db, user.id) or user
+      if verify is not None and not verify(fresh, db):
+        return None
+
+      _cleanup_expired_sessions(fresh.id, db=db)
+      raw = _issue_refresh(fresh.id, db=db)
       db.commit()
-    return _token_response(user, raw, extra, _wants_cookie(transport))
+    return _token_response(fresh, raw, extra, _wants_cookie(transport))
 
   def refresh():
     """Rinnova l'access token ruotando il refresh, in una sola transazione.
