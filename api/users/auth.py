@@ -11,7 +11,7 @@ from flask import g, request, jsonify, make_response
 
 from api.settings import IS_DEV
 from database_api import Session
-from database_api.operations import create, update, get_by_params, delete_bulk
+from database_api.operations import create, get_by_params, delete_bulk
 from .setup import (
   DECODE_JWT_TOKEN,
   ACCESS_TOKEN_MINUTES,
