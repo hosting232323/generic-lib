@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from flask import g, request, jsonify, make_response
 
 from api.settings import IS_DEV
+from database_api import Session
 from database_api.operations import create, update, get_by_params, delete_bulk
 from .setup import (
   DECODE_JWT_TOKEN,
@@ -114,7 +115,36 @@ def build_auth(session_model, get_user_by_id):
     if old:
       delete_bulk(old)
 
-  def _issue_refresh(user_id, family_id: str = None) -> str:
+  def _lock_family(db, family_id):
+    """Blocca le righe della famiglia per la durata della transazione.
+
+    Serve a mettere in fila refresh e logout sulla stessa catena: senza, un
+    logout puo' passare fra la rotazione e la nascita del successore, e il
+    successore sopravviverebbe al logout.
+
+    SQLite non conosce FOR UPDATE, ma serializza gia' le scritture per conto
+    suo, quindi li' il lock esplicito si salta.
+    """
+    if not family_id:
+      return []
+    query = db.query(session_model).filter(session_model.family_id == family_id)
+    if db.bind.dialect.name != 'sqlite':
+      query = query.with_for_update()
+    return query.all()
+
+  def _revoke_family_rows(db, family_id) -> int:
+    rows = [row for row in _lock_family(db, family_id) if not row.revoked]
+    for row in rows:
+      update(row, {'revoked': True, 'expires_at': _tombstone_expiry()}, session=db)
+    return len(rows)
+
+  def _family_has_live_row(db, family_id) -> bool:
+    return any(
+      not row.revoked and _aware(row.expires_at) >= _now()
+      for row in db.query(session_model).filter(session_model.family_id == family_id).all()
+    )
+
+  def _issue_refresh(user_id, family_id: str = None, db=None) -> str:
     """Emette un refresh token.
 
     Ogni login apre una famiglia nuova; ogni rotazione resta nella famiglia da
@@ -123,16 +153,20 @@ def build_auth(session_model, get_user_by_id):
     *l'utente* ha una sessione viva non dice niente su questa catena.
     """
     raw = secrets.token_urlsafe(48)
-    create(
-      session_model,
-      {
-        'user_id': user_id,
-        'token_hash': _hash_refresh(raw),
-        'expires_at': _now() + timedelta(days=REFRESH_TOKEN_DAYS),
-        'revoked': False,
-        'family_id': family_id or str(uuid.uuid4()),
-      },
-    )
+    params = {
+      'user_id': user_id,
+      'token_hash': _hash_refresh(raw),
+      'expires_at': _now() + timedelta(days=REFRESH_TOKEN_DAYS),
+      'revoked': False,
+      'family_id': family_id or str(uuid.uuid4()),
+    }
+    # Il kwarg session si passa solo se c'e' davvero una transazione aperta:
+    # db_session_decorator, ricevendo session=None, ne aprirebbe una sua e poi
+    # ripasserebbe il kwarg, andando in "multiple values for session".
+    if db is not None:
+      create(session_model, params, session=db)
+    else:
+      create(session_model, params)
     return raw
 
   def _find_session(raw: str):
@@ -218,79 +252,120 @@ def build_auth(session_model, get_user_by_id):
     return _token_response(user, _issue_refresh(user.id), extra, _wants_cookie(transport))
 
   def refresh():
+    """Rinnova l'access token ruotando il refresh, in una sola transazione.
+
+    Il punto delicato e' la concorrenza: due richieste che arrivano insieme col
+    medesimo token leggerebbero entrambe la sessione come attiva e ruoterebbero
+    entrambe, lasciando due sessioni vive nella stessa famiglia. La rotazione e'
+    quindi un compare-and-swap: l'UPDATE filtra su revoked=false, una sola
+    richiesta ottiene la riga e l'altra ne ottiene zero. Su Postgres la
+    perdente si blocca sul lock di riga e rivaluta la condizione dopo il commit
+    della vincente, quindi vede davvero lo stato aggiornato.
+    """
     raw, use_cookie = _read_refresh()
     if not raw:
       return jsonify({'status': 'session', 'message': 'Sessione assente'}), 401
 
-    session = _find_session(raw)
-    if not session:
-      return jsonify({'status': 'session', 'message': 'Sessione non valida'}), 401
+    token_hash = _hash_refresh(raw)
+    invalid = jsonify({'status': 'session', 'message': 'Sessione non valida'}), 401
 
-    if session.revoked:
-      if _within_grace(session) and _family_is_live(getattr(session, 'family_id', None)):
+    with Session() as db:
+      row = db.query(session_model).filter(session_model.token_hash == token_hash).first()
+      if row is None:
+        return invalid
+
+      family_id = getattr(row, 'family_id', None)
+      # Il lock va preso prima del compare-and-swap: mette in fila anche il
+      # logout, che altrimenti potrebbe passare fra la revoca della riga vecchia
+      # e la nascita del successore.
+      _lock_family(db, family_id)
+      db.refresh(row)
+
+      # La scadenza si verifica qui e non nella WHERE: il confronto fra
+      # datetime aware e colonne che SQLite restituisce naive non e' portabile,
+      # mentre _aware() lo normalizza. La finestra e' di giorni, la precisione
+      # al millisecondo non serve.
+      if not row.revoked and _aware(row.expires_at) < _now():
+        return invalid
+
+      won = (
+        db.query(session_model)
+        .filter(session_model.token_hash == token_hash, session_model.revoked.is_(False))
+        .update(
+          {'revoked': True, 'rotated_at': _now(), 'expires_at': _tombstone_expiry()},
+          synchronize_session=False,
+        )
+      )
+
+      if won:
+        user = get_user_by_id(row.user_id)
+        if not user:
+          db.commit()
+          return jsonify({'status': 'session', 'message': 'Utente non trovato'}), 401
+
+        new_raw = _issue_refresh(row.user_id, family_id, db=db)
+        db.commit()
+        return _token_response(user, new_raw, use_cookie=use_cookie)
+
+      # Non abbiamo vinto la corsa: la riga era gia' revocata.
+      db.refresh(row)
+      if _within_grace(row) and _family_has_live_row(db, family_id):
         # Due schede (o due richieste partite insieme) hanno scoperto l'access
-        # token scaduto nello stesso momento e chiamano /refresh con lo stesso
-        # cookie: la seconda arriva con un token appena ruotato. E' il caso
-        # normale, non un furto, e trattarlo come replay sloggherebbe l'utente
-        # ovunque ogni volta che tiene aperte due schede.
+        # token scaduto nello stesso momento. E' il caso normale, non un furto,
+        # e trattarlo come replay sloggherebbe l'utente ogni volta che tiene
+        # aperte due schede.
         #
-        # La condizione e' sulla famiglia, non sull'utente: se il successore
-        # di questa catena e' stato revocato (logout, reset password) non c'e'
+        # La condizione e' sulla famiglia, non sull'utente: se il successore di
+        # questa catena e' stato revocato (logout, reset password) non c'e'
         # nessuna corsa da giustificare, nemmeno se un altro dispositivo dello
         # stesso utente ha ancora una sessione sua.
         #
         # Qui NON si emette una sessione nuova. Un token gia' speso non puo'
         # generarne altre: se lo facesse, chi lo ha rubato potrebbe riusarlo a
-        # ripetizione per tutta la finestra creando una sessione per volta, e
-        # anche il caso legittimo lascerebbe in giro sessioni orfane. Si
+        # ripetizione per tutta la finestra creando una sessione per volta. Si
         # restituisce solo un access token, senza toccare il cookie: il
         # chiamante prosegue col refresh che la rotazione ha gia' messo nel
-        # barattolo dei cookie, che nel browser e' condiviso fra le schede.
-        #
-        # Il replay resta cosi' limitato a un access token di breve durata e
-        # non consente in nessun caso di ottenere persistenza.
-        user = get_user_by_id(session.user_id)
+        # barattolo, condiviso fra le schede.
+        user = get_user_by_id(row.user_id)
         if not user:
           return jsonify({'status': 'session', 'message': 'Utente non trovato'}), 401
+        db.commit()
         return jsonify({'status': 'ok', 'access_token': create_access_token(user.id, getattr(user, 'role', None))})
 
-      # Reuse detection. Fuori dalla finestra di grazia, un refresh gia' speso
-      # che riappare e' o una copia rubata, o il legittimo proprietario a cui
-      # l'hanno rubata e ruotata sotto il naso. Da qui non sappiamo distinguere
-      # i due, quindi chiudiamo tutto e costringiamo al login: e' l'unico esito
-      # che non lascia dentro il ladro.
-      family_id = getattr(session, 'family_id', None)
+      # Reuse detection: un refresh gia' speso che riappare fuori dalla finestra
+      # e' o una copia rubata, o il legittimo proprietario a cui l'hanno rubata
+      # e ruotata sotto il naso. Non sapendo distinguerli, si chiude la catena.
       if family_id:
-        revoke_family(family_id)
+        _revoke_family_rows(db, family_id)
       else:
         # Modello senza famiglie: non sapendo quale catena sia, si chiude tutto.
-        revoke_user_sessions(session.user_id)
-      return jsonify({'status': 'session', 'message': 'Sessione non valida'}), 401
-
-    if _aware(session.expires_at) < _now():
-      return jsonify({'status': 'session', 'message': 'Sessione non valida'}), 401
-
-    user = get_user_by_id(session.user_id)
-    if not user:
-      update(session, {'revoked': True, 'expires_at': _tombstone_expiry()})
-      return jsonify({'status': 'session', 'message': 'Utente non trovato'}), 401
-
-    # Rotazione: la riga vecchia diventa lapide, il token nuovo nasce sulla sua.
-    # rotated_at distingue "revocata perche' ruotata" da "revocata da logout o
-    # reset password": solo la prima ha diritto alla finestra di grazia.
-    update(session, {'revoked': True, 'rotated_at': _now(), 'expires_at': _tombstone_expiry()})
-    return _token_response(
-      user,
-      _issue_refresh(session.user_id, getattr(session, 'family_id', None)),
-      use_cookie=use_cookie,
-    )
+        for stale in db.query(session_model).filter(session_model.user_id == row.user_id).all():
+          if not stale.revoked:
+            update(stale, {'revoked': True, 'expires_at': _tombstone_expiry()}, session=db)
+      db.commit()
+      return invalid
 
   def logout():
+    """Chiude la sessione, e con essa tutta la sua catena.
+
+    Il token presentato puo' benissimo essere gia' stato ruotato: basta che il
+    refresh automatico sia passato un istante prima del click. Fermarsi alla
+    riga trovata, come si faceva, lasciava vivo il successore e il logout non
+    chiudeva niente. Si revoca quindi la famiglia, sotto lo stesso lock che usa
+    il refresh, cosi' una rotazione in corso non riesce a infilare un successore
+    dopo la revoca.
+    """
     raw, _ = _read_refresh()
     if raw:
-      session = _find_session(raw)
-      if session and not session.revoked:
-        update(session, {'revoked': True, 'expires_at': _tombstone_expiry()})
+      with Session() as db:
+        row = db.query(session_model).filter(session_model.token_hash == _hash_refresh(raw)).first()
+        if row is not None:
+          family_id = getattr(row, 'family_id', None)
+          if family_id:
+            _revoke_family_rows(db, family_id)
+          elif not row.revoked:
+            update(row, {'revoked': True, 'expires_at': _tombstone_expiry()}, session=db)
+          db.commit()
 
     response = make_response(jsonify({'status': 'ok', 'message': 'Logout effettuato'}))
     response.delete_cookie(REFRESH_COOKIE_NAME, domain=REFRESH_COOKIE_DOMAIN, path=REFRESH_COOKIE_PATH)

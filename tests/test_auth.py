@@ -25,60 +25,69 @@ Le regole verificate qui, una per test:
 """
 
 import pytz
-from datetime import datetime, timedelta
+import tempfile
 from types import SimpleNamespace
+from datetime import datetime, timedelta
+from pathlib import Path
 
 import jwt
 import pytest
 from flask import Flask
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, create_engine
 
-import api.users.auth as auth_module
+import database_api
+from database_api import Base, Session
+import api.users.auth as auth_module  # noqa: F401
 from api.users.auth import build_auth, create_access_token, REFRESH_COOKIE_NAME
 from api.users.setup import DECODE_JWT_TOKEN
 
 
-class FakeStore:
-  """Rimpiazza le operations del database_api con una lista in memoria."""
+class SessionRow(Base):
+  """Modello di sessione minimo, con le stesse colonne che build_auth si aspetta.
 
-  def __init__(self):
-    self.rows = []
-    self._id = 0
+  I test girano su un SQLite vero e non su un finto store: la rotazione e' un
+  compare-and-swap dentro una transazione, e un dizionario in memoria non ne
+  direbbe niente.
+  """
 
-  def create(self, model, params):
-    self._id += 1
-    row = SimpleNamespace(id=self._id, **params)
-    self.rows.append(row)
-    return row
+  __tablename__ = 'test_user_session'
 
-  def update(self, instance, params):
-    for key, value in params.items():
-      setattr(instance, key, value)
-    return instance
+  id = Column(Integer, primary_key=True, autoincrement=True)
+  user_id = Column(Integer, nullable=False)
+  token_hash = Column(String, nullable=False, unique=True, index=True)
+  expires_at = Column(DateTime(timezone=True), nullable=False)
+  revoked = Column(Boolean, nullable=False, default=False)
+  rotated_at = Column(DateTime(timezone=True))
+  family_id = Column(String, nullable=False, index=True)
 
-  def get_by_params(self, model, params_list):
-    return [row for row in self.rows if all(getattr(row, key) == value for key, value in params_list)]
 
-  def delete_bulk(self, instances):
-    for instance in instances:
-      self.rows.remove(instance)
+@pytest.fixture
+def store():
+  """Database vero, ricreato da zero a ogni test."""
+  path = Path(tempfile.mkdtemp(prefix='auth-test-')) / 'auth.sqlite'
+  engine = create_engine(f'sqlite:///{path}')
+  SessionRow.__table__.create(engine)
+  database_api.engine = engine
+  yield SessionRow
+  database_api.engine = None
+  engine.dispose()
+
+
+def rows():
+  with Session() as db:
+    return db.query(SessionRow).all()
+
+
+def live_rows():
+  return [row for row in rows() if not row.revoked]
 
 
 USERS = {1: SimpleNamespace(id=1, role='admin')}
 
 
 @pytest.fixture
-def store(monkeypatch):
-  fake = FakeStore()
-  monkeypatch.setattr(auth_module, 'create', fake.create)
-  monkeypatch.setattr(auth_module, 'update', fake.update)
-  monkeypatch.setattr(auth_module, 'get_by_params', fake.get_by_params)
-  monkeypatch.setattr(auth_module, 'delete_bulk', fake.delete_bulk)
-  return fake
-
-
-@pytest.fixture
 def auth(store):
-  return build_auth(session_model=object, get_user_by_id=lambda uid: USERS.get(int(uid)))
+  return build_auth(session_model=store, get_user_by_id=lambda uid: USERS.get(int(uid)))
 
 
 @pytest.fixture
@@ -128,9 +137,17 @@ def _age_rotations(store):
   Entro la grazia un token gia' ruotato che riappare e' due schede aperte;
   fuori, e' un replay. I test sul replay devono quindi guardare al dopo.
   """
-  for row in store.rows:
-    if getattr(row, 'rotated_at', None):
+  with Session() as db:
+    for row in db.query(SessionRow).filter(SessionRow.rotated_at.isnot(None)).all():
       row.rotated_at = datetime.now(pytz.utc) - timedelta(hours=1)
+    db.commit()
+
+
+def _expire(row_id):
+  with Session() as db:
+    row = db.query(SessionRow).filter(SessionRow.id == row_id).one()
+    row.expires_at = datetime.now(pytz.utc) - timedelta(days=1)
+    db.commit()
 
 
 def test_login_returns_access_token_and_sets_httponly_cookie(app):
@@ -253,7 +270,7 @@ def test_two_tabs_refreshing_together_both_survive(app, store):
   assert tab_two.get_json()['access_token']
   assert _refresh_cookie(tab_two) is None
   # E soprattutto non nascono sessioni in piu': una sola viva, quella ruotata.
-  assert len([row for row in store.rows if not row.revoked]) == 1
+  assert len([row for row in rows() if not row.revoked]) == 1
 
 
 def test_grace_never_mints_new_sessions_however_often_it_is_replayed(app, store):
@@ -265,7 +282,7 @@ def test_grace_never_mints_new_sessions_however_often_it_is_replayed(app, store)
   first = _refresh_cookie(app.post('/login'))
   app.set_cookie(REFRESH_COOKIE_NAME, first)
   app.post('/refresh')
-  live_before = len([row for row in store.rows if not row.revoked])
+  live_before = len([row for row in rows() if not row.revoked])
 
   for _ in range(5):
     app.set_cookie(REFRESH_COOKIE_NAME, first)
@@ -273,7 +290,7 @@ def test_grace_never_mints_new_sessions_however_often_it_is_replayed(app, store)
     assert replay.status_code == 200
     assert _refresh_cookie(replay) is None
 
-  assert len([row for row in store.rows if not row.revoked]) == live_before
+  assert len([row for row in rows() if not row.revoked]) == live_before
 
 
 def test_grace_is_not_granted_by_another_device_of_the_same_user(app, store):
@@ -311,7 +328,7 @@ def test_rotation_stays_in_the_same_family(app, store):
   app.set_cookie(REFRESH_COOKIE_NAME, first)
   app.post('/refresh')
 
-  families = {row.family_id for row in store.rows}
+  families = {row.family_id for row in rows()}
   assert len(families) == 1
 
 
@@ -319,7 +336,7 @@ def test_each_login_opens_its_own_family(app, store):
   app.post('/login')
   app.post('/login')
 
-  assert len({row.family_id for row in store.rows}) == 2
+  assert len({row.family_id for row in rows()}) == 2
 
 
 def test_grace_does_not_apply_once_the_chain_is_dead(app, store):
@@ -345,7 +362,7 @@ def test_replay_after_the_grace_window_still_revokes_everything(app, store):
 
   app.set_cookie(REFRESH_COOKIE_NAME, first)
   assert app.post('/refresh').status_code == 401
-  assert all(row.revoked for row in store.rows)
+  assert all(row.revoked for row in rows())
 
 
 def test_logout_gets_no_grace(app, store):
@@ -357,7 +374,7 @@ def test_logout_gets_no_grace(app, store):
 
   app.set_cookie(REFRESH_COOKIE_NAME, cookie)
   assert app.post('/refresh').status_code == 401
-  assert all(row.revoked for row in store.rows)
+  assert all(row.revoked for row in rows())
 
 
 def test_replay_revokes_the_compromised_family_only(app, store):
@@ -374,7 +391,7 @@ def test_replay_revokes_the_compromised_family_only(app, store):
   app.set_cookie(REFRESH_COOKIE_NAME, first)
   assert app.post('/refresh').status_code == 401
 
-  compromised = {row.family_id for row in store.rows if not row.revoked}
+  compromised = {row.family_id for row in rows() if not row.revoked}
   assert len(compromised) == 1
 
   app.set_cookie(REFRESH_COOKIE_NAME, other)
@@ -421,12 +438,55 @@ def test_login_cleans_up_only_expired_sessions(app, store):
   cookie = _refresh_cookie(app.post('/login'))
   app.set_cookie(REFRESH_COOKIE_NAME, cookie)
   app.post('/refresh')
-  tombstones = [row for row in store.rows if row.revoked]
+  tombstones = [row.id for row in rows() if row.revoked]
   assert tombstones
 
   app.post('/login')
-  assert [row for row in store.rows if row.revoked] == tombstones
+  assert [row.id for row in rows() if row.revoked] == tombstones
 
-  tombstones[0].expires_at = datetime.now(pytz.utc) - timedelta(days=1)
+  _expire(tombstones[0])
   app.post('/login')
-  assert tombstones[0] not in store.rows
+  assert tombstones[0] not in [row.id for row in rows()]
+
+
+def test_logout_closes_the_family_even_with_a_just_rotated_token(app, store):
+  """Il logout deve chiudere la catena anche se il cookie e' di un giro prima.
+
+  Basta che il refresh automatico sia passato un istante prima del click: il
+  token che il client presenta e' gia' stato ruotato. Fermarsi alla riga
+  trovata lasciava vivo il successore, e il logout non chiudeva niente.
+  """
+  first = _refresh_cookie(app.post('/login'))
+  app.set_cookie(REFRESH_COOKIE_NAME, first)
+  successor = _refresh_cookie(app.post('/refresh'))
+
+  # Logout col token precedente, gia' revocato dalla rotazione.
+  app.set_cookie(REFRESH_COOKIE_NAME, first)
+  assert app.post('/logout').status_code == 200
+
+  # Il successore non deve piu' valere.
+  app.set_cookie(REFRESH_COOKIE_NAME, successor)
+  assert app.post('/refresh').status_code == 401
+  assert live_rows() == []
+
+
+def test_concurrent_rotation_leaves_a_single_live_session(app, store):
+  """Due refresh simultanei non devono produrre due sessioni.
+
+  La rotazione e' un compare-and-swap: l'UPDATE filtra su revoked=false, quindi
+  una sola richiesta ottiene la riga. Qui le due chiamate sono sequenziali ma
+  partono dallo stesso token, che e' esattamente lo stato che due richieste
+  concorrenti si contendono.
+  """
+  shared = _refresh_cookie(app.post('/login'))
+
+  app.set_cookie(REFRESH_COOKIE_NAME, shared)
+  first = app.post('/refresh')
+  app.set_cookie(REFRESH_COOKIE_NAME, shared)
+  second = app.post('/refresh')
+
+  assert first.status_code == 200 and second.status_code == 200
+  # Solo la vincitrice emette un refresh nuovo.
+  assert _refresh_cookie(first) is not None
+  assert _refresh_cookie(second) is None
+  assert len(live_rows()) == 1
