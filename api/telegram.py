@@ -20,6 +20,7 @@ TELEGRAM_TOPIC = {
   'strongbox-be': 4294967353,
   'generic-be-demo': 4294967664,
   'generic-booking': 4294967351,
+  'addlance': 4294970503,
 }
 MAX_MESSAGE_LENGTH = 4096
 MAX_TELEGRAM_TEXT = 5 * MAX_MESSAGE_LENGTH
