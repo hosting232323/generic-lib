@@ -1,0 +1,511 @@
+"""Test del sistema access/refresh costruito da build_auth.
+
+Il modello mentale: due token con ruoli diversi.
+
+- **access token**: JWT breve, stateless, `sub = user.id`. Autorizza le
+  chiamate via header `Authorization: Bearer <token>`. Non e' revocabile ma
+  scade in fretta.
+- **refresh token**: stringa opaca lunga, di norma in cookie HttpOnly. Se ne
+  salva solo l'hash in una riga di `session`. Serve solo a ottenere un nuovo
+  access token, ed e' revocabile. Un client nativo, dove il cookie non ha
+  senso, puo' chiederlo nel body con l'header X-Auth-Transport: bearer.
+
+Le regole verificate qui, una per test:
+
+- login: emette access token nel body e setta il cookie refresh HttpOnly;
+- refresh: col cookie valido rilascia un nuovo access token e **ruota** il
+  refresh (il vecchio smette di valere subito);
+- replay: ripresentare un refresh gia' ruotato viene rifiutato con 401 **e**
+  chiude tutte le sessioni dell'utente (reuse detection);
+- logout: revoca la sessione e cancella il cookie;
+- decorator: header assente/non valido -> 401; ruolo sbagliato -> 403;
+- allow_query_token: legge il token dalla query (per <img>/<video>/download);
+- trasporto bearer: login/refresh/logout funzionano senza cookie;
+- cleanup al login: butta le sessioni scadute, tiene le lapidi revocate.
+"""
+
+import pytz
+import tempfile
+from types import SimpleNamespace
+from datetime import datetime, timedelta
+from pathlib import Path
+
+import jwt
+import pytest
+from flask import Flask
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, create_engine
+
+import database_api
+from database_api import Base, Session
+import api.users.auth as auth_module  # noqa: F401
+from api.users.auth import build_auth, create_access_token, REFRESH_COOKIE_NAME
+from api.users.setup import DECODE_JWT_TOKEN
+
+
+class SessionRow(Base):
+  """Modello di sessione minimo, con le stesse colonne che build_auth si aspetta.
+
+  I test girano su un SQLite vero e non su un finto store: la rotazione e' un
+  compare-and-swap dentro una transazione, e un dizionario in memoria non ne
+  direbbe niente.
+  """
+
+  __tablename__ = 'test_user_session'
+
+  id = Column(Integer, primary_key=True, autoincrement=True)
+  user_id = Column(Integer, nullable=False)
+  token_hash = Column(String, nullable=False, unique=True, index=True)
+  expires_at = Column(DateTime(timezone=True), nullable=False)
+  revoked = Column(Boolean, nullable=False, default=False)
+  rotated_at = Column(DateTime(timezone=True))
+  family_id = Column(String, nullable=False, index=True)
+
+
+@pytest.fixture
+def store():
+  """Database vero, ricreato da zero a ogni test."""
+  path = Path(tempfile.mkdtemp(prefix='auth-test-')) / 'auth.sqlite'
+  engine = create_engine(f'sqlite:///{path}')
+  SessionRow.__table__.create(engine)
+  database_api.engine = engine
+  yield SessionRow
+  database_api.engine = None
+  engine.dispose()
+
+
+def rows():
+  with Session() as db:
+    return db.query(SessionRow).all()
+
+
+def live_rows():
+  return [row for row in rows() if not row.revoked]
+
+
+USERS = {1: SimpleNamespace(id=1, role='admin')}
+
+
+@pytest.fixture
+def auth(store):
+  return build_auth(session_model=store, get_user_by_id=lambda uid: USERS.get(int(uid)))
+
+
+@pytest.fixture
+def app(auth):
+  app = Flask(__name__)
+
+  @app.route('/login', methods=['POST'])
+  def login():
+    return auth.login_response(USERS[1])
+
+  @app.route('/refresh', methods=['POST'])
+  def refresh():
+    return auth.refresh()
+
+  @app.route('/logout', methods=['POST'])
+  def logout():
+    return auth.logout()
+
+  @app.route('/admin')
+  @auth.authentication(roles=['admin'])
+  def admin(user):
+    return {'status': 'ok', 'who': user.id}
+
+  @app.route('/superadmin')
+  @auth.authentication(roles=['superadmin'])
+  def superadmin(user):
+    return {'status': 'ok'}
+
+  @app.route('/media')
+  @auth.authentication(allow_query_token=True)
+  def media(user):
+    return {'status': 'ok'}
+
+  return app.test_client()
+
+
+def _refresh_cookie(response):
+  for cookie in response.headers.getlist('Set-Cookie'):
+    if cookie.startswith(f'{REFRESH_COOKIE_NAME}='):
+      return cookie.split(';')[0].split('=', 1)[1]
+  return None
+
+
+def _age_rotations(store):
+  """Invecchia le rotazioni oltre la finestra di grazia.
+
+  Entro la grazia un token gia' ruotato che riappare e' due schede aperte;
+  fuori, e' un replay. I test sul replay devono quindi guardare al dopo.
+  """
+  with Session() as db:
+    for row in db.query(SessionRow).filter(SessionRow.rotated_at.isnot(None)).all():
+      row.rotated_at = datetime.now(pytz.utc) - timedelta(hours=1)
+    db.commit()
+
+
+def _expire(row_id):
+  with Session() as db:
+    row = db.query(SessionRow).filter(SessionRow.id == row_id).one()
+    row.expires_at = datetime.now(pytz.utc) - timedelta(days=1)
+    db.commit()
+
+
+def test_login_returns_access_token_and_sets_httponly_cookie(app):
+  r = app.post('/login')
+  body = r.get_json()
+  assert body['status'] == 'ok'
+  assert body['access_token']
+  set_cookie = next(c for c in r.headers.getlist('Set-Cookie') if c.startswith(REFRESH_COOKIE_NAME))
+  assert 'HttpOnly' in set_cookie
+
+
+def test_refresh_rotates_the_token(app):
+  first = _refresh_cookie(app.post('/login'))
+  app.set_cookie(REFRESH_COOKIE_NAME, first)
+  r = app.post('/refresh')
+  assert r.get_json()['access_token']
+  second = _refresh_cookie(r)
+  assert second and second != first
+
+
+def test_replay_of_rotated_token_is_rejected(app, store):
+  first = _refresh_cookie(app.post('/login'))
+  app.set_cookie(REFRESH_COOKIE_NAME, first)
+  app.post('/refresh')
+  _age_rotations(store)
+  # Riuso del vecchio refresh (gia' ruotato): non deve piu' valere.
+  app.set_cookie(REFRESH_COOKIE_NAME, first)
+  r = app.post('/refresh')
+  assert r.status_code == 401
+  assert r.get_json()['status'] == 'session'
+
+
+def test_logout_revokes_and_clears_cookie(app):
+  cookie = _refresh_cookie(app.post('/login'))
+  app.set_cookie(REFRESH_COOKIE_NAME, cookie)
+  app.post('/logout')
+  app.set_cookie(REFRESH_COOKIE_NAME, cookie)
+  r = app.post('/refresh')
+  assert r.status_code == 401
+
+
+def test_missing_access_token_is_401(app):
+  r = app.get('/admin')
+  assert r.status_code == 401
+  assert r.get_json() == {'status': 'session', 'message': 'Token assente'}
+
+
+def test_valid_access_token_authorizes(app):
+  token = create_access_token(1, 'admin')
+  r = app.get('/admin', headers={'Authorization': f'Bearer {token}'})
+  assert r.get_json()['status'] == 'ok'
+
+
+def test_wrong_role_is_403(app):
+  token = create_access_token(1, 'admin')
+  r = app.get('/superadmin', headers={'Authorization': f'Bearer {token}'})
+  assert r.status_code == 403
+  assert r.get_json()['status'] == 'forbidden'
+
+
+def test_bearer_prefix_is_optional(app):
+  token = create_access_token(1, 'admin')
+  r = app.get('/admin', headers={'Authorization': token})
+  assert r.get_json()['status'] == 'ok'
+
+
+def test_query_token_read_when_enabled(app):
+  token = create_access_token(1, 'admin')
+  assert app.get(f'/media?token={token}').get_json()['status'] == 'ok'
+  # Senza query token l'endpoint media resta chiuso.
+  assert app.get('/media').status_code == 401
+
+
+def test_query_token_tolerates_the_bearer_prefix(app):
+  # Chi costruisce l'URL di un media parte dallo stesso valore che userebbe
+  # nell'header: un `Bearer ` di troppo non deve invalidare il token.
+  token = create_access_token(1, 'admin')
+  assert app.get(f'/media?token=Bearer {token}').get_json()['status'] == 'ok'
+
+
+def test_query_token_endpoint_accepts_the_header_too(app):
+  # La query e' un ripiego per <img>/download: l'header deve continuare a
+  # funzionare, altrimenti quegli endpoint non sono chiamabili via fetch.
+  token = create_access_token(1, 'admin')
+  assert app.get('/media', headers={'Authorization': f'Bearer {token}'}).get_json()['status'] == 'ok'
+
+
+def test_token_without_sub_is_401_not_500(app):
+  # Un token firmato col nostro segreto ma di formato vecchio (claim `email`
+  # invece di `sub`) e' solo un token che non vale piu': non deve diventare un
+  # errore 500 con conseguente report d'errore.
+  legacy = jwt.encode(
+    {'email': 'chi@esempio.it', 'exp': (datetime.now(pytz.utc) + timedelta(hours=1)).timestamp()},
+    DECODE_JWT_TOKEN,
+    algorithm='HS256',
+  )
+  r = app.get('/admin', headers={'Authorization': legacy})
+  assert r.status_code == 401
+  assert r.get_json()['status'] == 'session'
+
+
+def test_two_tabs_refreshing_together_both_survive(app, store):
+  """Il caso normale di due schede aperte non deve sloggiare l'utente.
+
+  Entrambe scoprono l'access token scaduto e chiamano /refresh con lo stesso
+  cookie. La seconda arriva con un token gia' ruotato: dentro la finestra di
+  grazia e' un doppione innocuo, non un furto.
+  """
+  first = _refresh_cookie(app.post('/login'))
+
+  app.set_cookie(REFRESH_COOKIE_NAME, first)
+  tab_one = app.post('/refresh')
+  app.set_cookie(REFRESH_COOKIE_NAME, first)
+  tab_two = app.post('/refresh')
+
+  assert tab_one.status_code == 200
+  assert tab_two.status_code == 200
+  # La seconda riceve un access token ma NESSUN cookie nuovo: prosegue con il
+  # refresh che la prima ha gia' messo nel barattolo condiviso.
+  assert tab_two.get_json()['access_token']
+  assert _refresh_cookie(tab_two) is None
+  # E soprattutto non nascono sessioni in piu': una sola viva, quella ruotata.
+  assert len([row for row in rows() if not row.revoked]) == 1
+
+
+def test_grace_never_mints_new_sessions_however_often_it_is_replayed(app, store):
+  """Un token gia' speso non deve poter generare sessioni, nemmeno in grazia.
+
+  Altrimenti chi lo ruba lo rigioca a ripetizione per tutta la finestra e si
+  costruisce una sessione per volta, aggirando proprio la reuse detection.
+  """
+  first = _refresh_cookie(app.post('/login'))
+  app.set_cookie(REFRESH_COOKIE_NAME, first)
+  app.post('/refresh')
+  live_before = len([row for row in rows() if not row.revoked])
+
+  for _ in range(5):
+    app.set_cookie(REFRESH_COOKIE_NAME, first)
+    replay = app.post('/refresh')
+    assert replay.status_code == 200
+    assert _refresh_cookie(replay) is None
+
+  assert len([row for row in rows() if not row.revoked]) == live_before
+
+
+def test_grace_is_not_granted_by_another_device_of_the_same_user(app, store):
+  """La grazia deve guardare la catena, non l'utente.
+
+  Sequenza: il dispositivo A ruota, una richiesta col token vecchio resta
+  indietro, A fa logout revocando il proprio successore, ma il dispositivo B ha
+  ancora una sessione valida dello stesso utente. La richiesta ritardata di A
+  non deve essere accettata: la sua catena e' chiusa, e la sessione di B non ha
+  niente a che vedere con quella corsa.
+  """
+  device_a = _refresh_cookie(app.post('/login'))
+  app.set_cookie(REFRESH_COOKIE_NAME, device_a)
+  rotated_a = _refresh_cookie(app.post('/refresh'))
+
+  # Il dispositivo B fa un login suo: famiglia diversa, sessione viva.
+  device_b = _refresh_cookie(app.post('/login'))
+
+  app.set_cookie(REFRESH_COOKIE_NAME, rotated_a)
+  app.post('/logout')
+
+  # La richiesta ritardata di A, ancora dentro la finestra di grazia.
+  app.set_cookie(REFRESH_COOKIE_NAME, device_a)
+  delayed = app.post('/refresh')
+  assert delayed.status_code == 401
+  assert 'access_token' not in (delayed.get_json() or {})
+
+  # E la sessione di B non e' stata toccata: non era lei la catena compromessa.
+  app.set_cookie(REFRESH_COOKIE_NAME, device_b)
+  assert app.post('/refresh').status_code == 200
+
+
+def test_rotation_stays_in_the_same_family(app, store):
+  first = _refresh_cookie(app.post('/login'))
+  app.set_cookie(REFRESH_COOKIE_NAME, first)
+  app.post('/refresh')
+
+  families = {row.family_id for row in rows()}
+  assert len(families) == 1
+
+
+def test_each_login_opens_its_own_family(app, store):
+  app.post('/login')
+  app.post('/login')
+
+  assert len({row.family_id for row in rows()}) == 2
+
+
+def test_grace_does_not_apply_once_the_chain_is_dead(app, store):
+  # Dopo un logout non c'e' nessuna corsa fra schede da giustificare: un token
+  # che riappare, anche appena ruotato, e' un replay.
+  first = _refresh_cookie(app.post('/login'))
+  app.set_cookie(REFRESH_COOKIE_NAME, first)
+  rotated = _refresh_cookie(app.post('/refresh'))
+  app.set_cookie(REFRESH_COOKIE_NAME, rotated)
+  app.post('/logout')
+
+  app.set_cookie(REFRESH_COOKIE_NAME, first)
+  assert app.post('/refresh').status_code == 401
+
+
+def test_replay_after_the_grace_window_still_revokes_everything(app, store):
+  first = _refresh_cookie(app.post('/login'))
+  app.set_cookie(REFRESH_COOKIE_NAME, first)
+  app.post('/refresh')
+
+  # La rotazione risale a ben oltre la finestra: ora e' un replay vero.
+  _age_rotations(store)
+
+  app.set_cookie(REFRESH_COOKIE_NAME, first)
+  assert app.post('/refresh').status_code == 401
+  assert all(row.revoked for row in rows())
+
+
+def test_logout_gets_no_grace(app, store):
+  # La grazia vale solo per la rotazione: un token revocato dal logout che
+  # riappare resta un replay a tutti gli effetti.
+  cookie = _refresh_cookie(app.post('/login'))
+  app.set_cookie(REFRESH_COOKIE_NAME, cookie)
+  app.post('/logout')
+
+  app.set_cookie(REFRESH_COOKIE_NAME, cookie)
+  assert app.post('/refresh').status_code == 401
+  assert all(row.revoked for row in rows())
+
+
+def test_replay_revokes_the_compromised_family_only(app, store):
+  # Due dispositivi, due famiglie. Il replay di un refresh gia' speso chiude la
+  # catena su cui e' avvenuto: chi ha rubato quel token non ha niente che
+  # appartenga all'altra famiglia, quindi revocarla non lo caccia fuori di piu'
+  # e sloggherebbe l'altro dispositivo per niente.
+  first = _refresh_cookie(app.post('/login'))
+  other = _refresh_cookie(app.post('/login'))
+  app.set_cookie(REFRESH_COOKIE_NAME, first)
+  app.post('/refresh')
+  _age_rotations(store)
+
+  app.set_cookie(REFRESH_COOKIE_NAME, first)
+  assert app.post('/refresh').status_code == 401
+
+  compromised = {row.family_id for row in rows() if not row.revoked}
+  assert len(compromised) == 1
+
+  app.set_cookie(REFRESH_COOKIE_NAME, other)
+  assert app.post('/refresh').status_code == 200
+
+
+def test_revoke_user_sessions_closes_the_active_ones(app, auth):
+  cookie = _refresh_cookie(app.post('/login'))
+  assert auth.revoke_user_sessions(1) == 1
+
+  app.set_cookie(REFRESH_COOKIE_NAME, cookie)
+  assert app.post('/refresh').status_code == 401
+
+
+def test_bearer_transport_returns_refresh_in_body_without_cookie(app):
+  # Un client nativo dichiara il trasporto e si prende il refresh token nel
+  # body: nessun cookie da gestire, nessun SameSite di mezzo.
+  r = app.post('/login', headers={'X-Auth-Transport': 'bearer'})
+  body = r.get_json()
+  assert body['access_token'] and body['refresh_token']
+  assert _refresh_cookie(r) is None
+
+
+def test_bearer_transport_refreshes_and_rotates_from_body(app, store):
+  first = app.post('/login', headers={'X-Auth-Transport': 'bearer'}).get_json()['refresh_token']
+  r = app.post('/refresh', json={'refresh_token': first})
+  second = r.get_json()['refresh_token']
+  assert r.status_code == 200
+  assert second and second != first
+  # Anche sul canale bearer il token ruotato non vale piu', passata la grazia.
+  _age_rotations(store)
+  assert app.post('/refresh', json={'refresh_token': first}).status_code == 401
+
+
+def test_bearer_transport_logout_revokes(app):
+  raw = app.post('/login', headers={'X-Auth-Transport': 'bearer'}).get_json()['refresh_token']
+  app.post('/logout', json={'refresh_token': raw})
+  assert app.post('/refresh', json={'refresh_token': raw}).status_code == 401
+
+
+def test_login_cleans_up_only_expired_sessions(app, store):
+  # Le lapidi revocate ma non scadute vanno tenute: sono cio' che permette di
+  # riconoscere un replay. Solo le righe scadute si possono buttare.
+  cookie = _refresh_cookie(app.post('/login'))
+  app.set_cookie(REFRESH_COOKIE_NAME, cookie)
+  app.post('/refresh')
+  tombstones = [row.id for row in rows() if row.revoked]
+  assert tombstones
+
+  app.post('/login')
+  assert [row.id for row in rows() if row.revoked] == tombstones
+
+  _expire(tombstones[0])
+  app.post('/login')
+  assert tombstones[0] not in [row.id for row in rows()]
+
+
+def test_logout_closes_the_family_even_with_a_just_rotated_token(app, store):
+  """Il logout deve chiudere la catena anche se il cookie e' di un giro prima.
+
+  Basta che il refresh automatico sia passato un istante prima del click: il
+  token che il client presenta e' gia' stato ruotato. Fermarsi alla riga
+  trovata lasciava vivo il successore, e il logout non chiudeva niente.
+  """
+  first = _refresh_cookie(app.post('/login'))
+  app.set_cookie(REFRESH_COOKIE_NAME, first)
+  successor = _refresh_cookie(app.post('/refresh'))
+
+  # Logout col token precedente, gia' revocato dalla rotazione.
+  app.set_cookie(REFRESH_COOKIE_NAME, first)
+  assert app.post('/logout').status_code == 200
+
+  # Il successore non deve piu' valere.
+  app.set_cookie(REFRESH_COOKIE_NAME, successor)
+  assert app.post('/refresh').status_code == 401
+  assert live_rows() == []
+
+
+def test_concurrent_rotation_leaves_a_single_live_session(app, store):
+  """Due refresh simultanei non devono produrre due sessioni.
+
+  La rotazione e' un compare-and-swap: l'UPDATE filtra su revoked=false, quindi
+  una sola richiesta ottiene la riga. Qui le due chiamate sono sequenziali ma
+  partono dallo stesso token, che e' esattamente lo stato che due richieste
+  concorrenti si contendono.
+  """
+  shared = _refresh_cookie(app.post('/login'))
+
+  app.set_cookie(REFRESH_COOKIE_NAME, shared)
+  first = app.post('/refresh')
+  app.set_cookie(REFRESH_COOKIE_NAME, shared)
+  second = app.post('/refresh')
+
+  assert first.status_code == 200 and second.status_code == 200
+  # Solo la vincitrice emette un refresh nuovo.
+  assert _refresh_cookie(first) is not None
+  assert _refresh_cookie(second) is None
+  assert len(live_rows()) == 1
+
+
+def test_login_verify_runs_and_can_refuse(app, auth, store):
+  """La verifica passata al login decide se la sessione nasce.
+
+  E' il gancio che permette di controllare la password dentro il lock, nello
+  stesso atto in cui la sessione viene creata: farlo prima lascia una finestra
+  in cui un reset password concorrente cambia le credenziali e il login prosegue
+  con quelle vecchie.
+  """
+  seen = []
+  with Flask(__name__).test_request_context():
+    assert auth.login_response(USERS[1], verify=lambda fresh, db: False) is None
+    assert rows() == []
+
+    assert auth.login_response(USERS[1], verify=lambda fresh, db: seen.append(fresh.id) or True) is not None
+
+  assert seen == [1]
+  assert len(live_rows()) == 1
