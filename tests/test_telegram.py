@@ -1,6 +1,9 @@
 import asyncio
 import threading
 
+from flask import Flask
+from telegramify_markdown import utf16_len
+
 from api import telegram
 from api.telegram import MAX_MESSAGE_LENGTH, MAX_TELEGRAM_TEXT, TELEGRAM_TOPIC
 
@@ -42,7 +45,7 @@ def test_send_message_splits_oversized_code_block(monkeypatch):
 
   assert len(chunks) > 1
   assert all(chunks), 'nessun chunk vuoto'
-  assert all(len(chunk) <= MAX_MESSAGE_LENGTH for chunk in chunks)
+  assert all(utf16_len(chunk) <= MAX_MESSAGE_LENGTH for chunk in chunks)
   assert ''.join(chunks).count('png') == 1500
 
 
@@ -73,6 +76,41 @@ def test_send_message_error_report_shape(monkeypatch):
 
   assert len(chunks) == 1
   assert 'Traceback' in chunks[0]
+
+
+def test_send_error_message_labels_and_orders_long_sections(monkeypatch):
+  StubBot.sent = []
+  monkeypatch.setattr(telegram, 'Bot', StubBot)
+  trace = '\n'.join(f'trace line {index}' for index in range(800))
+  request_data = '{\n' + ',\n'.join(f'  "field_{index}": "value"' for index in range(500)) + '\n}'
+
+  asyncio.run(telegram.send_error_message(trace, request_data))
+
+  chunks = chunk_texts(StubBot.sent)
+  request_start = next(index for index, chunk in enumerate(chunks) if chunk.startswith('*Request Data'))
+  assert request_start > 0
+  assert all(chunk.startswith('*Errore') for chunk in chunks[:request_start])
+  assert all(chunk.startswith('*Request Data') for chunk in chunks[request_start:])
+  assert all(len(chunk) <= MAX_MESSAGE_LENGTH for chunk in chunks)
+  assert ''.join(chunks).count('trace line') == 800
+  assert ''.join(chunks).count('field_') == 500
+
+
+def test_send_telegram_error_schedules_trace_and_request_as_separate_sections(monkeypatch):
+  sent = []
+
+  async def fake_send_error_message(trace, request_data=None):
+    sent.append((trace, request_data))
+
+  monkeypatch.setattr(telegram, 'IS_DEV', False)
+  monkeypatch.setattr(telegram, 'TELEGRAM_TOKEN', 'test-token')
+  monkeypatch.setattr(telegram, 'extract_request_data', lambda: '{"path": "/orders"}')
+  monkeypatch.setattr(telegram, 'send_error_message', fake_send_error_message)
+  monkeypatch.setattr(telegram, '_send_in_background', lambda coroutine_factory: asyncio.run(coroutine_factory()))
+
+  telegram.send_telegram_error('traceback')
+
+  assert sent == [('traceback', '{"path": "/orders"}')]
 
 
 def test_send_message_unbalanced_markdown_does_not_raise(monkeypatch):
@@ -115,3 +153,62 @@ def test_send_telegram_message_truncates_oversized_text(monkeypatch):
   assert len(sent) == 1
   assert sent[0].endswith('… messaggio troncato')
   assert len(sent[0]) <= MAX_TELEGRAM_TEXT + len('\n… messaggio troncato')
+
+
+def test_send_telegram_message_does_not_interleave_background_batches(monkeypatch):
+  events = []
+  completed = threading.Event()
+  created_threads = []
+  real_thread = threading.Thread
+
+  def recording_thread(*args, **kwargs):
+    thread = real_thread(*args, **kwargs)
+    created_threads.append(thread)
+    return thread
+
+  async def fake_send_message(text, topic_name=None):
+    events.append(f'start:{text}')
+    await asyncio.sleep(0.05)
+    events.append(f'end:{text}')
+    if len(events) == 4:
+      completed.set()
+
+  monkeypatch.setattr(telegram, 'send_message', fake_send_message)
+  monkeypatch.setattr(telegram.threading, 'Thread', recording_thread)
+
+  telegram.send_telegram_message('first')
+  telegram.send_telegram_message('second')
+
+  assert completed.wait(1)
+  for thread in created_threads:
+    thread.join(timeout=1)
+  assert events in [
+    ['start:first', 'end:first', 'start:second', 'end:second'],
+    ['start:second', 'end:second', 'start:first', 'end:first'],
+  ]
+
+
+def test_extract_request_data_redacts_credentials_recursively():
+  app = Flask(__name__)
+  with app.test_request_context(
+    '/orders?token=query-secret&visible=yes',
+    method='POST',
+    headers={
+      'Authorization': 'Bearer header-secret',
+      'Cookie': 'refresh_token=cookie-secret',
+      'X-Api-Key': 'api-secret',
+      'X-Request-Id': 'request-id',
+    },
+    json={'password': 'body-secret', 'nested': {'refresh_token': 'refresh-secret', 'value': 1}},
+  ):
+    request_data = telegram.extract_request_data(string_result=False)
+
+  assert request_data['headers']['Authorization'] == telegram.REDACTED_VALUE
+  assert request_data['headers']['Cookie'] == telegram.REDACTED_VALUE
+  assert request_data['headers']['X-Api-Key'] == telegram.REDACTED_VALUE
+  assert request_data['headers']['X-Request-Id'] == 'request-id'
+  assert request_data['args'] == {'token': telegram.REDACTED_VALUE, 'visible': 'yes'}
+  assert request_data['json'] == {
+    'password': telegram.REDACTED_VALUE,
+    'nested': {'refresh_token': telegram.REDACTED_VALUE, 'value': 1},
+  }
