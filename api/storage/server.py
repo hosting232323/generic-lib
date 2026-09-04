@@ -92,7 +92,24 @@ def _list_files_server(full_path):
 
 
 @storage_decorator
+def _unlock_folder_backup_server():
+  subprocess.run(
+    [
+      'restic',
+      '-r',
+      f'sftp:{BACKUP_SSH_CONFIG}:{os.path.join(BACKUP_FOLDER, "folder-backup")}',
+      'unlock',
+      '--remove-all',
+    ],
+    env=set_backup_env(),
+    capture_output=True,
+    text=True,
+  )
+
+
+@storage_decorator
 def _folder_backup_server(folder_to_backup):
+  _unlock_folder_backup_server()
   subprocess.run(
     [
       'restic',
