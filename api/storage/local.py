@@ -23,7 +23,23 @@ def _list_files_local(full_path):
   ]
 
 
+def _unlock_folder_backup_local():
+  subprocess.run(
+    [
+      'restic',
+      '-r',
+      os.path.join(BACKUP_FOLDER, 'folder-backup'),
+      'unlock',
+      '--remove-all',
+    ],
+    env=set_backup_env(),
+    capture_output=True,
+    text=True,
+  )
+
+
 def _folder_backup_local(folder_to_backup):
+  _unlock_folder_backup_local()
   subprocess.run(
     [
       'restic',
