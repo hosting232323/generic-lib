@@ -1,6 +1,8 @@
 import sys
 import json
 import asyncio
+import logging
+import re
 import threading
 import telegramify_markdown
 from telegram import Bot
@@ -27,6 +29,20 @@ MAX_TELEGRAM_TEXT = 5 * MAX_MESSAGE_LENGTH
 CHUNK_HEADER_RESERVE = 64
 TRUNCATED_SUFFIX = '\n… messaggio troncato'
 REDACTED_VALUE = '[REDACTED]'
+TELEGRAM_BOT_TOKEN_RE = re.compile(r'\d{5,}:[A-Za-z0-9_-]{20,}')
+TELEGRAM_SENSITIVE_LOGGERS = (
+  'httpx',
+  'httpcore',
+  'httpcore.connection',
+  'httpcore.http11',
+  'httpcore.http2',
+  'httpcore.proxy',
+  'httpcore.socks',
+  'telegram',
+  'telegram.Bot',
+  'telegram.request.BaseRequest',
+  'telegram.request.HTTPXRequest',
+)
 SENSITIVE_REQUEST_KEYS = {
   'access_token',
   'api_key',
@@ -45,6 +61,73 @@ SENSITIVE_REQUEST_KEYS = {
   'x_auth_token',
 }
 _TELEGRAM_SEND_LOCK = threading.Lock()
+_EXCEPTION_FORMATTER = logging.Formatter()
+
+
+def _redact_telegram_credentials(value):
+  text = str(value)
+  if TELEGRAM_TOKEN:
+    text = text.replace(TELEGRAM_TOKEN, REDACTED_VALUE)
+  return TELEGRAM_BOT_TOKEN_RE.sub(REDACTED_VALUE, text)
+
+
+def _redact_log_value(value):
+  if isinstance(value, tuple):
+    redacted = tuple(_redact_log_value(item) for item in value)
+    return value if all(new is old for new, old in zip(redacted, value)) else redacted
+  if isinstance(value, list):
+    redacted = [_redact_log_value(item) for item in value]
+    return value if all(new is old for new, old in zip(redacted, value)) else redacted
+  if isinstance(value, dict):
+    redacted = {key: _redact_log_value(item) for key, item in value.items()}
+    return value if all(redacted[key] is item for key, item in value.items()) else redacted
+
+  text = str(value)
+  redacted = _redact_telegram_credentials(text)
+  return value if redacted == text else redacted
+
+
+class _TelegramCredentialFilter(logging.Filter):
+  _generic_lib_telegram_redaction = True
+
+  def filter(self, record):
+    try:
+      # Keep structured arguments intact unless the individual value contains
+      # a credential. Formatting the whole record here would discard them.
+      record.msg = _redact_log_value(record.msg)
+      record.args = _redact_log_value(record.args)
+
+      if record.exc_info:
+        traceback = _EXCEPTION_FORMATTER.formatException(record.exc_info)
+        redacted_traceback = _redact_telegram_credentials(traceback)
+        if redacted_traceback != traceback:
+          # Structured handlers such as Sentry may ignore exc_text and inspect
+          # exc_info directly. For a credential-bearing exception, prefer a
+          # sanitized traceback over retaining the original exception object.
+          record.exc_text = redacted_traceback
+          record.exc_info = None
+      elif record.exc_text:
+        record.exc_text = _redact_telegram_credentials(record.exc_text)
+
+      if record.stack_info:
+        record.stack_info = _redact_telegram_credentials(record.stack_info)
+    except Exception:
+      # A logging safeguard must never break the application call path.
+      return True
+    return True
+
+
+def _install_telegram_log_redaction():
+  # Logger filters run only on the logger that creates the record, not on its
+  # ancestors during propagation. Register every concrete logger used by httpx,
+  # httpcore and python-telegram-bot that can carry request URLs or Bot reprs.
+  for logger_name in TELEGRAM_SENSITIVE_LOGGERS:
+    target = logging.getLogger(logger_name)
+    if not any(getattr(item, '_generic_lib_telegram_redaction', False) for item in target.filters):
+      target.addFilter(_TelegramCredentialFilter())
+
+
+_install_telegram_log_redaction()
 
 
 async def _render_chunks(text, max_utf16_len=MAX_MESSAGE_LENGTH):
@@ -102,12 +185,13 @@ def _send_in_background(coroutine_factory):
         asyncio.run(coroutine_factory())
       print('✅ Messaggio Telegram inviato con successo')  # noqa: T201
     except Exception as exc:
-      print('❌ Errore Telegram:', exc)  # noqa: T201
+      safe_error = _redact_telegram_credentials(exc)
+      print('❌ Errore Telegram:', safe_error)  # noqa: T201
       try:
         with open('telegram_errors.log', 'a', encoding='utf-8') as f:
           import datetime
 
-          f.write(f'{datetime.datetime.now().isoformat()} - Error: {exc}\n')
+          f.write(f'{datetime.datetime.now().isoformat()} - Error: {safe_error}\n')
       except Exception:
         pass
 
