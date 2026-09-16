@@ -140,3 +140,21 @@ def test_empty_attachment_list_does_not_wrap_the_message():
   msg = _build_message('test@example.com', 'Corpo', 'Sub', attachments=[])
 
   assert msg.get_content_type() == 'multipart/alternative'
+
+
+@EMAIL_SENDER_PATCH
+def test_tag_sets_mailin_header_when_provided():
+  from api.email import _build_message
+
+  msg = _build_message('test@example.com', 'Corpo', 'Sub', tag='order-123-abc')
+
+  assert msg['X-Mailin-Tag'] == 'order-123-abc'
+
+
+@EMAIL_SENDER_PATCH
+def test_no_tag_omits_mailin_header():
+  from api.email import _build_message
+
+  msg = _build_message('test@example.com', 'Corpo', 'Sub')
+
+  assert msg['X-Mailin-Tag'] is None

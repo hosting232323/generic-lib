@@ -18,8 +18,15 @@ SMTP_MAX_RETRIES = 3
 SMTP_SERVER = 'smtp-relay.brevo.com'
 
 
-def send_email(receiver_email: str, body, subject: str, attachments: list = None, signature: dict | str = None) -> bool:
-  message = _build_message(receiver_email, body, subject, attachments, signature)
+def send_email(
+  receiver_email: str,
+  body,
+  subject: str,
+  attachments: list = None,
+  signature: dict | str = None,
+  tag: str = None,
+) -> bool:
+  message = _build_message(receiver_email, body, subject, attachments, signature, tag)
   raw = message.as_string()
 
   attempts = max(1, SMTP_MAX_RETRIES)
@@ -40,7 +47,12 @@ def send_email(receiver_email: str, body, subject: str, attachments: list = None
 
 
 def _build_message(
-  receiver_email: str, body, subject: str, attachments: list = None, signature: dict | str = None
+  receiver_email: str,
+  body,
+  subject: str,
+  attachments: list = None,
+  signature: dict | str = None,
+  tag: str = None,
 ) -> MIMEMultipart:
   message = MIMEMultipart('alternative')
 
@@ -74,6 +86,11 @@ def _build_message(
   message['From'] = formataddr((EMAIL_SENDER['name'], EMAIL_SENDER['address']))
   message['To'] = receiver_email
   message['Subject'] = subject
+  if tag:
+    # Brevo la rispedisce indietro nei webhook di evento (delivered, bounce, ...): è la
+    # chiave per correlare un invio SMTP al suo esito finale, che l'accettazione SMTP da
+    # sola non garantisce.
+    message['X-Mailin-Tag'] = tag
 
   return message
 
