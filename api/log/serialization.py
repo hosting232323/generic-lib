@@ -11,6 +11,8 @@ REDACTED_KEYS = {
   'pass_token',
   'token',
   'new_token',
+  'access_token',
+  'refresh_token',
   'google_token',
   'stripe_api_key',
 }
