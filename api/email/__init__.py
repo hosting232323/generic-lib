@@ -1,26 +1,39 @@
+import base64
 import time
-import smtplib
-import mimetypes
 import traceback
-from email import encoders
-from email.utils import formataddr
-from email.mime.base import MIMEBase
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 
-from .sender import EMAIL_SENDER
+import requests
+
+from .sender import EMAIL_SENDER, RESEND_API_KEY
 from ..telegram import send_telegram_message
 
 
-SMTP_PORT = 587
+RESEND_API_URL = 'https://api.resend.com/emails'
 RETRY_BACKOFF = 2.0
 SMTP_MAX_RETRIES = 3
-SMTP_SERVER = 'smtp-relay.brevo.com'
 
 
-def send_email(receiver_email: str, body, subject: str, attachments: list = None, signature: dict | str = None) -> bool:
-  message = _build_message(receiver_email, body, subject, attachments, signature)
-  raw = message.as_string()
+def send_email(
+  receiver_email: str,
+  body,
+  subject: str,
+  attachments: list = None,
+  signature: dict | str = None,
+  tag: str = None,
+) -> str | None:
+  """
+  Invia una mail tramite Resend API.
+
+  Ritorna l'email_id Resend (str) se la mail è accettata, None se tutti i
+  tentativi falliscono (invia anche alert Telegram in quel caso).
+
+  Backward-compatible con il vecchio bool: None è falsy come False, una
+  stringa non vuota è truthy come True. I chiamanti che fanno `if send_email(...)`
+  continuano a funzionare senza modifiche; quelli che vogliono tracciare la
+  consegna (italco-be/mailer.py) usano l'email_id restituito come chiave di
+  correlazione con i webhook Resend.
+  """
+  payload = _build_payload(receiver_email, body, subject, attachments, signature, tag)
 
   attempts = max(1, SMTP_MAX_RETRIES)
   backoff = RETRY_BACKOFF
@@ -28,22 +41,24 @@ def send_email(receiver_email: str, body, subject: str, attachments: list = None
 
   for attempt in range(1, attempts + 1):
     try:
-      _deliver(receiver_email, raw)
-      return True
+      return _deliver(payload)
     except Exception:
       last_error = traceback.format_exc()
       if attempt < attempts:
         time.sleep(backoff * attempt)
 
   send_telegram_message(_build_error_message(receiver_email, subject, body, last_error))
-  return False
+  return None
 
 
-def _build_message(
-  receiver_email: str, body, subject: str, attachments: list = None, signature: dict | str = None
-) -> MIMEMultipart:
-  message = MIMEMultipart('alternative')
-
+def _build_payload(
+  receiver_email: str,
+  body,
+  subject: str,
+  attachments: list = None,
+  signature: dict | str = None,
+  tag: str = None,
+) -> dict:
   sig_text = ''
   sig_html = ''
   if signature:
@@ -53,41 +68,71 @@ def _build_message(
     elif isinstance(signature, str):
       sig_text = signature
 
+  payload: dict = {
+    'from': f'{EMAIL_SENDER["name"]} <{EMAIL_SENDER["address"]}>',
+    'to': [receiver_email],
+    'subject': subject,
+  }
+
   if isinstance(body, dict) and 'text' in body and 'html' in body:
-    body_text = body['text'] + (f'\n\n{sig_text}' if sig_text else '')
-    body_html = body['html'] + (f'<br><br>{sig_html}' if sig_html else '')
-    message.attach(MIMEText(body_text, 'plain'))
-    message.attach(MIMEText(body_html, 'html'))
+    payload['text'] = body['text'] + (f'\n\n{sig_text}' if sig_text else '')
+    payload['html'] = body['html'] + (f'<br><br>{sig_html}' if sig_html else '')
   elif isinstance(body, str):
-    body_text = body + (f'\n\n{sig_text}' if sig_text else '')
-    message.attach(MIMEText(body_text, 'plain'))
+    payload['text'] = body + (f'\n\n{sig_text}' if sig_text else '')
   else:
     raise ValueError('Il corpo dell\'email deve essere un dizionario con le chiavi "text" e "html" o una stringa')
 
   if attachments:
-    envelope = MIMEMultipart('mixed')
-    envelope.attach(message)
-    for attachment in attachments:
-      envelope.attach(_build_attachment(attachment))
-    message = envelope
+    payload['attachments'] = [_build_attachment(a) for a in attachments]
 
-  message['From'] = formataddr((EMAIL_SENDER['name'], EMAIL_SENDER['address']))
-  message['To'] = receiver_email
-  message['Subject'] = subject
+  if tag:
+    # Resend tags: array di {name, value}. Sono key-value alfanumerici.
+    # Utili per filtrare nella dashboard Resend; la correlazione webhook avviene
+    # tramite l'email_id restituito da _deliver(), non via questo campo.
+    safe_tag = ''.join(c if c.isalnum() or c == '-' else '-' for c in str(tag))[:128]
+    payload['tags'] = [{'name': 'tag', 'value': safe_tag or 'unset'}]
 
-  return message
+  return payload
 
 
-def _build_attachment(attachment: dict) -> MIMEBase:
-  filename = attachment['filename']
-  content_type = attachment.get('content_type') or mimetypes.guess_type(filename)[0] or 'application/octet-stream'
-  maintype, _, subtype = content_type.partition('/')
+def _build_attachment(attachment: dict) -> dict:
+  content = attachment['content']
+  if isinstance(content, bytes):
+    content = base64.b64encode(content).decode('ascii')
 
-  part = MIMEBase(maintype, subtype)
-  part.set_payload(attachment['content'])
-  encoders.encode_base64(part)
-  part.add_header('Content-Disposition', 'attachment', filename=filename)
-  return part
+  result: dict = {
+    'filename': attachment['filename'],
+    'content': content,
+  }
+
+  # Resend deduce il content-type dal filename se non viene passato esplicitamente.
+  # Lo propaghiamo solo se il chiamante lo ha fornito per evitare di passare
+  # un valore None che l'API potrebbe rifiutare.
+  if attachment.get('content_type'):
+    result['content_type'] = attachment['content_type']
+
+  return result
+
+
+def _deliver(payload: dict) -> str:
+  """
+  Chiama POST https://api.resend.com/emails e restituisce l'email_id.
+
+  Solleva un'eccezione su qualsiasi risposta non-2xx (incluso 422 per dominio
+  non verificato, 429 per limite giornaliero superato, ecc.) — l'errore è
+  esplicito e immediato, mai silenzioso come la coda del piano Free di Brevo.
+  """
+  response = requests.post(
+    RESEND_API_URL,
+    json=payload,
+    headers={
+      'Authorization': f'Bearer {RESEND_API_KEY}',
+      'Content-Type': 'application/json',
+    },
+    timeout=30,
+  )
+  response.raise_for_status()
+  return response.json()['id']
 
 
 def _build_error_message(receiver_email: str, subject: str, body, error: str) -> str:
@@ -103,17 +148,3 @@ def _extract_body_text(body) -> str:
   if isinstance(body, dict):
     return body.get('text') or body.get('html') or ''
   return body or ''
-
-
-def _connect() -> smtplib.SMTP:
-  server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-  server.ehlo()
-  server.starttls()
-  server.ehlo()
-  server.login(EMAIL_SENDER['login'], EMAIL_SENDER['password'])
-  return server
-
-
-def _deliver(receiver_email: str, raw: str) -> None:
-  with _connect() as server:
-    server.sendmail(EMAIL_SENDER['address'], receiver_email, raw)

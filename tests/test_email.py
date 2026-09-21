@@ -1,142 +1,95 @@
+import base64
 from unittest.mock import patch
-from api.email import send_email
+from api.email import send_email, _build_payload
+
+
+EMAIL_SENDER_PATCH = patch.dict(
+  'api.email.sender.EMAIL_SENDER',
+  {'name': 'Sender Name', 'address': 'sender@example.com'},
+)
 
 
 @patch('api.email._deliver')
 @patch('time.sleep')
 @patch('api.email.send_telegram_message')
-@patch.dict(
-  'api.email.sender.EMAIL_SENDER',
-  {'name': 'Sender Name', 'address': 'sender@example.com', 'login': 'sender@example.com', 'password': 'secretpassword'},
-)
+@EMAIL_SENDER_PATCH
 def test_send_email_error_sends_telegram_message(mock_send_telegram, mock_sleep, mock_deliver):
-  # Configure _deliver to raise an exception every time
-  mock_deliver.side_effect = Exception('SMTP Connection Timeout / Brevo Error')
+  mock_deliver.side_effect = Exception('Resend API Error 500')
 
-  # Call send_email
   result = send_email('test@example.com', 'Test body', 'Test Subject')
 
-  # Verify send_email returns False
-  assert result is False
-
-  # Verify _deliver was called 3 times (the maximum number of retries)
+  assert result is None
   assert mock_deliver.call_count == 3
-
-  # Verify time.sleep was called 2 times (after attempt 1 and 2, but not after attempt 3)
   assert mock_sleep.call_count == 2
-  mock_sleep.assert_any_call(2.0)  # attempt 1 backoff: 2.0 * 1
-  mock_sleep.assert_any_call(4.0)  # attempt 2 backoff: 2.0 * 2
-
-  # Verify send_telegram_message was called once
+  mock_sleep.assert_any_call(2.0)
+  mock_sleep.assert_any_call(4.0)
   mock_send_telegram.assert_called_once()
 
-  # Check that the telegram message contains the error details
   telegram_text = mock_send_telegram.call_args[0][0]
   assert '❌ *Errore invio mail a* `test@example.com`' in telegram_text
   assert '*Subject:* Test Subject' in telegram_text
-  assert 'SMTP Connection Timeout / Brevo Error' in telegram_text
-  # Il contenuto della mail non deve andare perso: va incluso nel messaggio Telegram
+  assert 'Resend API Error 500' in telegram_text
   assert 'Test body' in telegram_text
 
 
-@patch.dict(
-  'api.email.sender.EMAIL_SENDER',
-  {
-    'name': 'Sender Name',
-    'address': 'sender@example.com',
-    'login': 'sender@example.com',
-    'password': 'secretpassword',
-  },
-)
-def test_email_signature_appending():
-  from api.email import _build_message
+@patch('api.email._deliver')
+@EMAIL_SENDER_PATCH
+def test_send_email_success(mock_deliver):
+  mock_deliver.return_value = 'email_id_12345'
 
-  # 1. Test with dict signature (both text and html)
+  result = send_email('test@example.com', 'Test body', 'Test Subject')
+
+  assert result == 'email_id_12345'
+  mock_deliver.assert_called_once()
+
+
+@EMAIL_SENDER_PATCH
+def test_email_signature_appending():
+  # 1. Test with dict signature
   body_dict = {'text': 'Hello world', 'html': '<h1>Hello world</h1>'}
   sig_dict = {'text': 'Text Signature', 'html': '<p>HTML Signature</p>'}
-  msg = _build_message('test@example.com', body_dict, 'Test Subject', signature=sig_dict)
+  payload = _build_payload('test@example.com', body_dict, 'Test Subject', signature=sig_dict)
 
-  payloads = [part.get_payload() for part in msg.get_payload()]
-  assert 'Hello world\n\nText Signature' in payloads[0]
-  assert '<h1>Hello world</h1><br><br><p>HTML Signature</p>' in payloads[1]
+  assert 'Hello world\n\nText Signature' in payload['text']
+  assert '<h1>Hello world</h1><br><br><p>HTML Signature</p>' in payload['html']
+  assert payload['from'] == 'Sender Name <sender@example.com>'
+  assert payload['to'] == ['test@example.com']
 
-  # 2. Test with string signature (text only)
+  # 2. Test with string signature
   body_str = 'Hello world'
-  msg_str = _build_message('test@example.com', body_str, 'Test Subject', signature='Text Signature')
-  payload_str = msg_str.get_payload()[0].get_payload()
-  assert 'Hello world\n\nText Signature' in payload_str
+  payload_str = _build_payload('test@example.com', body_str, 'Test Subject', signature='Text Signature')
+  assert 'Hello world\n\nText Signature' in payload_str['text']
 
-  # 3. Test with no signature (None)
-  msg_no_sig = _build_message('test@example.com', 'Hello world', 'Test Subject', signature=None)
-  payload_no_sig = msg_no_sig.get_payload()[0].get_payload()
-  assert payload_no_sig == 'Hello world'
-
-
-EMAIL_SENDER_PATCH = patch.dict(
-  'api.email.sender.EMAIL_SENDER',
-  {'name': 'Sender Name', 'address': 'sender@example.com', 'login': 'sender@example.com', 'password': 'secretpassword'},
-)
+  # 3. Test with no signature
+  payload_no_sig = _build_payload('test@example.com', 'Hello world', 'Test Subject', signature=None)
+  assert payload_no_sig['text'] == 'Hello world'
 
 
 @EMAIL_SENDER_PATCH
-def test_attachments_are_siblings_of_the_body_not_alternatives():
-  from api.email import _build_message
+def test_build_payload_attachments():
+  attachments = [
+    {'content': b'%PDF-', 'filename': 'doc.pdf'},
+    {'content': b'image-bytes', 'filename': 'pic.png', 'content_type': 'image/png'},
+    {'content': 'already-string', 'filename': 'test.txt'},
+  ]
+  payload = _build_payload('test@example.com', 'Body', 'Subject', attachments=attachments)
 
-  msg = _build_message(
-    'test@example.com',
-    {'text': 'Ordine non completato', 'html': '<p>Ordine non completato</p>'},
-    'Test Subject',
-    attachments=[{'content': b'jpeg-bytes', 'filename': 'foto.jpg'}],
-  )
+  assert len(payload['attachments']) == 3
+  assert payload['attachments'][0]['filename'] == 'doc.pdf'
+  assert payload['attachments'][0]['content'] == base64.b64encode(b'%PDF-').decode('ascii')
+  assert 'content_type' not in payload['attachments'][0]
 
-  assert msg.get_content_type() == 'multipart/mixed'
-  body, photo = msg.get_payload()
-  assert body.get_content_type() == 'multipart/alternative'
-  assert [part.get_content_type() for part in body.get_payload()] == ['text/plain', 'text/html']
-  assert photo.get_content_type() == 'image/jpeg'
-  assert photo.get_payload(decode=True) == b'jpeg-bytes'
+  assert payload['attachments'][1]['filename'] == 'pic.png'
+  assert payload['attachments'][1]['content'] == base64.b64encode(b'image-bytes').decode('ascii')
+  assert payload['attachments'][1]['content_type'] == 'image/png'
 
-  assert msg['To'] == 'test@example.com'
-  assert msg['Subject'] == 'Test Subject'
-  assert body['To'] is None
+  assert payload['attachments'][2]['content'] == 'already-string'
 
 
 @EMAIL_SENDER_PATCH
-def test_attachment_content_type_comes_from_the_filename():
-  from api.email import _build_message
+def test_build_payload_tags():
+  payload = _build_payload('test@example.com', 'Body', 'Subject', tag='order_123!test')
+  assert payload['tags'] == [{'name': 'tag', 'value': 'order-123-test'}]
 
-  msg = _build_message(
-    'test@example.com',
-    'Corpo',
-    'Test Subject',
-    attachments=[
-      {'content': b'%PDF-', 'filename': 'formulario.pdf'},
-      {'content': b'png', 'filename': 'foto.png'},
-      {'content': b'???', 'filename': 'senza-estensione'},
-      {'content': b'csv', 'filename': 'export.csv', 'content_type': 'text/csv'},
-    ],
-  )
-
-  types = [part.get_content_type() for part in msg.get_payload()[1:]]
-  assert types == ['application/pdf', 'image/png', 'application/octet-stream', 'text/csv']
-  assert [part.get_filename() for part in msg.get_payload()[1:]][0] == 'formulario.pdf'
-
-
-@EMAIL_SENDER_PATCH
-def test_message_without_attachments_is_unchanged():
-  from api.email import _build_message
-
-  msg = _build_message('test@example.com', {'text': 'Corpo', 'html': '<p>Corpo</p>'}, 'Test Subject')
-
-  assert msg.get_content_type() == 'multipart/alternative'
-  assert [part.get_content_type() for part in msg.get_payload()] == ['text/plain', 'text/html']
-  assert msg['Subject'] == 'Test Subject'
-
-
-@EMAIL_SENDER_PATCH
-def test_empty_attachment_list_does_not_wrap_the_message():
-  from api.email import _build_message
-
-  msg = _build_message('test@example.com', 'Corpo', 'Sub', attachments=[])
-
-  assert msg.get_content_type() == 'multipart/alternative'
+  payload_none = _build_payload('test@example.com', 'Body', 'Subject', tag=None)
+  assert 'tags' not in payload_none
