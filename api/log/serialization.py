@@ -1,5 +1,6 @@
 import json
 import decimal
+import re
 
 from .paths import LOG_MAX_FIELD_CHARS, LOG_MAX_LINE_BYTES
 
@@ -16,6 +17,8 @@ REDACTED_KEYS = {
   'google_token',
   'stripe_api_key',
 }
+_ORDER_TRACKING_TOKEN = re.compile(r'(/order/(?:public|track)/)[A-Za-z0-9_-]+')
+_ORDER_TRACKING_FRAGMENT = re.compile(r'(/order/track#)[A-Za-z0-9_-]+')
 
 
 def redact(value):
@@ -23,6 +26,8 @@ def redact(value):
     return {key: '***' if key.lower() in REDACTED_KEYS else redact(val) for key, val in value.items()}
   if isinstance(value, list):
     return [redact(item) for item in value]
+  if isinstance(value, str):
+    return _ORDER_TRACKING_FRAGMENT.sub(r'\1***', _ORDER_TRACKING_TOKEN.sub(r'\1***', value))
   return value
 
 
