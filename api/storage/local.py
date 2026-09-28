@@ -24,15 +24,17 @@ def _list_files_local(full_path):
 
 
 def _unlock_folder_backup_local():
+  # Restic's default unlock removes stale locks only. Never clear live locks:
+  # another worker may be using this repository concurrently.
   subprocess.run(
     [
       'restic',
       '-r',
       os.path.join(BACKUP_FOLDER, 'folder-backup'),
       'unlock',
-      '--remove-all',
     ],
     env=set_backup_env(),
+    check=True,
     capture_output=True,
     text=True,
   )

@@ -99,9 +99,9 @@ def _unlock_folder_backup_server():
       '-r',
       f'sftp:{BACKUP_SSH_CONFIG}:{os.path.join(BACKUP_FOLDER, "folder-backup")}',
       'unlock',
-      '--remove-all',
     ],
     env=set_backup_env(),
+    check=True,
     capture_output=True,
     text=True,
   )
