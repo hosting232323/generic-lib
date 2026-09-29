@@ -4,11 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "generic_lib"
-version = "4.9.2"
+version = "4.9.3"
 requires-python = ">=3.11"
 authors = [{ name = "GioVanni", email = "colasanto.giovanni.inf@gmail.com" }]
 dependencies = [
-  "SQLAlchemy",
+  # 2.1 usa psycopg 3 come driver di default per postgresql://, ma gli extra installano psycopg2
+  "SQLAlchemy<2.1",
   "alembic",
   "requests",
   "python-dotenv",
