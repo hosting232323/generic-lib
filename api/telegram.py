@@ -57,6 +57,10 @@ SENSITIVE_REQUEST_KEYS = {
   'x_api_key',
   'x_auth_token',
 }
+# Come per i log: qualsiasi campo che contenga password o secret, o finisca per
+# _token, e' un segreto anche se il nome non e' nella lista (admin_password, ...).
+SENSITIVE_REQUEST_KEY_PARTS = ('password', 'secret')
+SENSITIVE_REQUEST_KEY_SUFFIXES = ('_token',)
 _TELEGRAM_SEND_LOCK = threading.Lock()
 _EXCEPTION_FORMATTER = logging.Formatter()
 
@@ -213,10 +217,19 @@ def _normalize_request_key(key):
   return str(key).strip().lower().replace('-', '_')
 
 
+def _is_sensitive_request_key(key):
+  normalized = _normalize_request_key(key)
+  return (
+    normalized in SENSITIVE_REQUEST_KEYS
+    or any(part in normalized for part in SENSITIVE_REQUEST_KEY_PARTS)
+    or normalized.endswith(SENSITIVE_REQUEST_KEY_SUFFIXES)
+  )
+
+
 def _redact_sensitive_data(value):
   if isinstance(value, dict):
     return {
-      key: REDACTED_VALUE if _normalize_request_key(key) in SENSITIVE_REQUEST_KEYS else _redact_sensitive_data(item)
+      key: REDACTED_VALUE if _is_sensitive_request_key(key) else _redact_sensitive_data(item)
       for key, item in value.items()
     }
   if isinstance(value, list):

@@ -4,15 +4,17 @@ from datetime import datetime
 from .dates import ROME_TZ
 from .paths import get_log_dir
 from ..telegram import extract_request_data
-from .serialization import cap_request, cap_field, log_default, redact
+from .serialization import cap_request, cap_field, log_default, redact, strip_bodies
 
 
 DEFAULT_USER_LOG_FIELD = 'email'
 
 
-def write_log(user, log_folder, response=None, swagger=False, user_field=DEFAULT_USER_LOG_FIELD):
+def write_log(user, log_folder, response=None, swagger=False, user_field=DEFAULT_USER_LOG_FIELD, with_body=True):
   request_info = extract_request_data(False)
   request_info.pop('headers', None)
+  if not with_body:
+    request_info, response = strip_bodies(request_info, response)
 
   now = datetime.now(ROME_TZ)
   month_dir = get_log_dir(log_folder) / now.strftime('%Y-%m')

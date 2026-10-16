@@ -9,6 +9,7 @@ from .telegram import send_telegram_error
 EXCLUDED_METHODS = ('OPTIONS', 'HEAD')
 EXCLUDED_PATHS = ('/',)
 EXCLUDED_PREFIXES = ('/swagger', '/photos')
+BODY_EXCLUDED_PREFIXES = ()
 
 
 def handle_exception(error):
@@ -21,12 +22,26 @@ def handle_exception(error):
   return {'status': 'ko', 'message': 'Errore generico'}, 200
 
 
-def log_request(response, log_folder, excluded_paths, excluded_prefixes, user_log_field=None):
+def log_request(
+  response,
+  log_folder,
+  excluded_paths,
+  excluded_prefixes,
+  user_log_field=None,
+  body_excluded_prefixes=BODY_EXCLUDED_PREFIXES,
+):
   try:
     if is_loggable(excluded_paths, excluded_prefixes):
       body = extract_response(response)
       if body is not None:
-        write_log(g.get('log_user'), log_folder, body, swagger=g.get('log_swagger', False), user_field=user_log_field)
+        write_log(
+          g.get('log_user'),
+          log_folder,
+          body,
+          swagger=g.get('log_swagger', False),
+          user_field=user_log_field,
+          with_body=not has_prefix(request.path, body_excluded_prefixes),
+        )
   except Exception:
     traceback.print_exc()
   return response
@@ -39,9 +54,13 @@ def is_loggable(excluded_paths, excluded_prefixes):
     return False
   if request.path in excluded_paths:
     return False
-  if excluded_prefixes and request.path.startswith(tuple(excluded_prefixes)):
+  if has_prefix(request.path, excluded_prefixes):
     return False
   return True
+
+
+def has_prefix(path, prefixes):
+  return bool(prefixes) and path.startswith(tuple(prefixes))
 
 
 def extract_response(response):

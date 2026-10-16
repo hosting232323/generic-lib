@@ -16,14 +16,36 @@ REDACTED_KEYS = {
   'refresh_token',
   'google_token',
   'stripe_api_key',
+  'api_key',
+  'secret',
+  'client_secret',
+  'authorization',
+  'cookie',
+  'set_cookie',
+  'id_token',
 }
+# Oltre alle chiavi esatte, si nasconde qualsiasi chiave che contenga uno di
+# questi pezzi (admin_password, confirm_password, webhook_secret, ...) o che
+# finisca per _token: i nomi dei campi li sceglie ogni progetto, e una
+# password con un nome nuovo non deve finire in chiaro nel log.
+REDACTED_KEY_PARTS = ('password', 'secret')
+REDACTED_KEY_SUFFIXES = ('_token',)
 _ORDER_TRACKING_TOKEN = re.compile(r'(/order/(?:public|track)/)[A-Za-z0-9_-]+')
 _ORDER_TRACKING_FRAGMENT = re.compile(r'(/order/track#)[A-Za-z0-9_-]+')
 
 
+def is_redacted_key(key) -> bool:
+  normalized = str(key).strip().lower().replace('-', '_')
+  return (
+    normalized in REDACTED_KEYS
+    or any(part in normalized for part in REDACTED_KEY_PARTS)
+    or normalized.endswith(REDACTED_KEY_SUFFIXES)
+  )
+
+
 def redact(value):
   if isinstance(value, dict):
-    return {key: '***' if key.lower() in REDACTED_KEYS else redact(val) for key, val in value.items()}
+    return {key: '***' if is_redacted_key(key) else redact(val) for key, val in value.items()}
   if isinstance(value, list):
     return [redact(item) for item in value]
   if isinstance(value, str):
@@ -50,6 +72,21 @@ def cap_request(request_info):
     return cap_field(request_info)
 
   return {key: value if key in ('method', 'path') else cap_field(value) for key, value in request_info.items()}
+
+
+def strip_bodies(request_info, response):
+  """Riduce richiesta e risposta a cio' che serve per l'audit, senza i body.
+
+  Per gli endpoint che trattano credenziali o dati personali di chi non e'
+  ancora un utente (login, cambio password, form pubblici) il log deve dire
+  chi ha chiamato cosa e com'e' andata, non cosa e' stato mandato.
+  """
+  request_info = {key: request_info[key] for key in ('method', 'path') if key in request_info}
+  if isinstance(response, dict):
+    response = {key: response[key] for key in ('status', 'status_code', 'traceback') if key in response}
+  else:
+    response = None
+  return request_info, response
 
 
 def cap_field(value):
