@@ -3,27 +3,16 @@ import decimal
 import re
 
 from .paths import LOG_MAX_FIELD_CHARS, LOG_MAX_LINE_BYTES
+from ..secret_keys import is_secret_key
 
 
-REDACTED_KEYS = {
-  'password',
-  'new_password',
-  'old_password',
-  'pass_token',
-  'token',
-  'new_token',
-  'access_token',
-  'refresh_token',
-  'google_token',
-  'stripe_api_key',
-}
 _ORDER_TRACKING_TOKEN = re.compile(r'(/order/(?:public|track)/)[A-Za-z0-9_-]+')
 _ORDER_TRACKING_FRAGMENT = re.compile(r'(/order/track#)[A-Za-z0-9_-]+')
 
 
 def redact(value):
   if isinstance(value, dict):
-    return {key: '***' if key.lower() in REDACTED_KEYS else redact(val) for key, val in value.items()}
+    return {key: '***' if is_secret_key(key) else redact(val) for key, val in value.items()}
   if isinstance(value, list):
     return [redact(item) for item in value]
   if isinstance(value, str):
@@ -50,6 +39,21 @@ def cap_request(request_info):
     return cap_field(request_info)
 
   return {key: value if key in ('method', 'path') else cap_field(value) for key, value in request_info.items()}
+
+
+def strip_bodies(request_info, response):
+  """Riduce richiesta e risposta a cio' che serve per l'audit, senza i body.
+
+  Per gli endpoint che trattano credenziali o dati personali di chi non e'
+  ancora un utente (login, cambio password, form pubblici) il log deve dire
+  chi ha chiamato cosa e com'e' andata, non cosa e' stato mandato.
+  """
+  request_info = {key: request_info[key] for key in ('method', 'path') if key in request_info}
+  if isinstance(response, dict):
+    response = {key: response[key] for key in ('status', 'status_code', 'traceback') if key in response}
+  else:
+    response = None
+  return request_info, response
 
 
 def cap_field(value):
