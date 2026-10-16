@@ -480,3 +480,49 @@ def test_cleanup_passes_folder_and_server_to_delete_file(monkeypatch):
   assert server is True
   assert subfolder == '/srv/dumps'
   assert ignore_dev is True
+
+
+def test_the_notification_does_not_carry_the_database_password(monkeypatch, tmp_path):
+  """La notifica dice quale database non e' stato salvato, mai con quale password."""
+  messages = _collect_telegram(monkeypatch)
+  _run_threads_inline(monkeypatch)
+  monkeypatch.setattr(backup_module, 'BACKUP_FOLDER', '')
+
+  db_backup('postgresql://italco:S3gr3ta!@db.interno:5432/italco', server=True)
+
+  assert len(messages) == 1
+  assert 'S3gr3ta!' not in messages[0]
+  assert 'postgresql://italco:***@db.interno:5432/italco' in messages[0]
+
+
+def test_the_password_is_hidden_also_in_the_error_details(monkeypatch, tmp_path):
+  """pg_dump puo' riportare la riga di comando, e con lei l'URL intero."""
+  db_url = 'postgresql://italco:S3gr3ta!@db.interno/italco'
+  messages = _collect_telegram(monkeypatch)
+  _fake_disk_usage(monkeypatch, 10)
+  _run_threads_inline(monkeypatch)
+  monkeypatch.setattr(backup_module, 'BACKUP_FOLDER', str(tmp_path))
+
+  def failing_export(url):
+    raise subprocess.CalledProcessError(1, 'pg_dump', stderr=f'pg_dump --dbname={url}: connessione fallita (S3gr3ta!)')
+
+  monkeypatch.setattr(backup_module, 'data_export', failing_export)
+
+  db_backup(db_url, server=True)
+
+  assert len(messages) == 1
+  assert 'S3gr3ta!' not in messages[0]
+  assert 'connessione fallita' in messages[0]
+
+
+@pytest.mark.parametrize(
+  'db_url, expected',
+  [
+    ('postgresql://user:pwd@localhost/db', 'postgresql://user:***@localhost/db'),
+    ('postgres://user:p%40ss@host:5433/db?sslmode=require', 'postgres://user:***@host:5433/db?sslmode=require'),
+    ('postgresql://user@localhost/db', 'postgresql://user@localhost/db'),
+    ('postgresql://localhost/db', 'postgresql://localhost/db'),
+  ],
+)
+def test_mask_db_url(db_url, expected):
+  assert backup_module.mask_db_url(db_url) == expected

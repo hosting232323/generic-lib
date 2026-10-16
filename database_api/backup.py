@@ -3,7 +3,7 @@ import errno
 import shutil
 import threading
 import subprocess
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit
 from datetime import datetime, timedelta
 
 from api.telegram import send_telegram_message
@@ -163,7 +163,7 @@ def report_failed_backup(db_url: str, error: Exception, file_path: str = None, s
     title = '**📦 DB Backup Fallito — spazio esaurito**'
 
   message = [
-    f'{title}\n▶️ `{db_url}`\n',
+    f'{title}\n▶️ `{mask_db_url(db_url)}`\n',
     f'{label} ({"server" if server else "local"}):**',
     f'`{error_details(error)}`',
   ]
@@ -171,7 +171,50 @@ def report_failed_backup(db_url: str, error: Exception, file_path: str = None, s
   if file_path and os.path.exists(file_path):
     message.append(keep_dump(file_path, server))
 
-  send_telegram_message('\n'.join(message))
+  # Anche i dettagli dell'errore possono riportare la riga di comando di
+  # pg_dump, quindi l'URL: si ripulisce il messaggio intero.
+  send_telegram_message(hide_db_password('\n'.join(message), db_url))
+
+
+def mask_db_url(db_url: str) -> str:
+  """L'URL del database senza password, da mostrare nelle notifiche.
+
+  La notifica serve a capire quale database non e' stato salvato: bastano
+  utente, host e nome. La password non deve mai lasciare la macchina, e un
+  canale Telegram non e' il posto dove tenerla.
+  """
+  try:
+    parts = urlsplit(db_url)
+    if parts.password is None:
+      return db_url
+
+    host = parts.hostname or ''
+    if parts.port:
+      host = f'{host}:{parts.port}'
+    user = f'{parts.username}:***@' if parts.username else ':***@'
+    return parts._replace(netloc=f'{user}{host}').geturl()
+  except Exception:
+    return '***'
+
+
+def hide_db_password(text: str, db_url: str) -> str:
+  """Toglie dal testo l'URL e la password del database, se compaiono.
+
+  I messaggi d'errore di pg_dump e dei comandi di copia possono riportare la
+  riga di comando, quindi l'URL intero: si sostituisce prima l'URL, poi la
+  password da sola, nel caso compaia in un'altra forma.
+  """
+  if not text:
+    return text
+
+  text = text.replace(db_url, mask_db_url(db_url))
+  try:
+    password = urlsplit(db_url).password
+  except Exception:
+    password = None
+  if password:
+    text = text.replace(password, '***')
+  return text
 
 
 def keep_dump(file_path: str, server=None) -> str:
