@@ -4,7 +4,9 @@ from flask import Flask, request
 
 from api import register_flask_hooks
 from api.log.paths import get_log_dir
+from api.hooks import has_prefix
 from api.log.serialization import redact
+from api.secret_keys import normalize_key
 
 
 def test_redact_hides_session_tokens_in_a_login_response():
@@ -41,6 +43,55 @@ def test_redact_hides_any_field_that_looks_like_a_password_or_a_secret():
     'nickname': 'mario',
     'token_count': 3,
   }
+
+
+def test_redact_hides_camel_case_secrets_sent_by_the_frontend():
+  payload = {
+    'accessToken': 'a',
+    'refreshToken': 'r',
+    'apiKey': 'k',
+    'idToken': 'i',
+    'APIKey': 'k2',
+    'X-Auth-Token': 'x',
+    'userId': 7,
+    'tokenCount': 2,
+  }
+
+  assert redact(payload) == {
+    'accessToken': '***',
+    'refreshToken': '***',
+    'apiKey': '***',
+    'idToken': '***',
+    'APIKey': '***',
+    'X-Auth-Token': '***',
+    'userId': 7,
+    'tokenCount': 2,
+  }
+
+
+def test_normalize_key_turns_camel_case_and_dashes_into_snake_case():
+  assert normalize_key('accessToken') == 'access_token'
+  assert normalize_key('Access-Token') == 'access_token'
+  assert normalize_key('APIKey') == 'api_key'
+  assert normalize_key('ACCESS_TOKEN') == 'access_token'
+
+
+def test_redact_hides_password_metadata_on_purpose():
+  # Falsi positivi voluti (vedi api/secret_keys.py): meglio nascondere un flag
+  # che lasciare in chiaro una password con un nome nuovo.
+  assert redact({'has_password': True, 'password_changed_at': '2026-10-16'}) == {
+    'has_password': '***',
+    'password_changed_at': '***',
+  }
+
+
+def test_has_prefix_treats_a_single_string_as_one_prefix():
+  assert has_prefix('/user/login', '/user')
+  assert not has_prefix('/company', '/user')
+  assert has_prefix('/users', ('/user',))
+  assert not has_prefix('/users', ('/user/',))
+  assert not has_prefix('/user/login', ())
+  assert not has_prefix('/user/login', None)
 
 
 def _read_log_lines(log_folder):

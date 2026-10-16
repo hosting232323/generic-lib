@@ -302,3 +302,33 @@ def test_extract_request_data_redacts_credentials_recursively():
     'password': telegram.REDACTED_VALUE,
     'nested': {'refresh_token': telegram.REDACTED_VALUE, 'value': 1},
   }
+
+
+def test_extract_request_data_redacts_any_secret_looking_field_in_any_casing():
+  app = Flask(__name__)
+  with app.test_request_context(
+    '/company',
+    method='POST',
+    json={
+      'name': 'Acme',
+      'admin_password': 'admin-secret',
+      'device_token': 'device-secret',
+      'accessToken': 'camel-access',
+      'refreshToken': 'camel-refresh',
+      'apiKey': 'camel-key',
+      'idToken': 'camel-id',
+      'clientSecret': 'camel-secret',
+    },
+  ):
+    request_data = telegram.extract_request_data(string_result=False)
+
+  assert request_data['json'] == {
+    'name': 'Acme',
+    'admin_password': telegram.REDACTED_VALUE,
+    'device_token': telegram.REDACTED_VALUE,
+    'accessToken': telegram.REDACTED_VALUE,
+    'refreshToken': telegram.REDACTED_VALUE,
+    'apiKey': telegram.REDACTED_VALUE,
+    'idToken': telegram.REDACTED_VALUE,
+    'clientSecret': telegram.REDACTED_VALUE,
+  }

@@ -60,7 +60,19 @@ def is_loggable(excluded_paths, excluded_prefixes):
 
 
 def has_prefix(path, prefixes):
-  return bool(prefixes) and path.startswith(tuple(prefixes))
+  """Vero se `path` comincia con uno dei prefissi.
+
+  Il confronto e' sul path grezzo, carattere per carattere: `('/user',)`
+  prende anche `/users` e `/user_settings`. Per fermarsi al segmento si passa
+  `'/user/'` (e, se serve, anche il path esatto `'/user'`).
+  Una stringa sola e' trattata come un prefisso solo: `tuple('/user')`
+  varrebbe ('/', 'u', ...) e il '/' prenderebbe tutti i path.
+  """
+  if not prefixes:
+    return False
+  if isinstance(prefixes, str):
+    prefixes = (prefixes,)
+  return path.startswith(tuple(prefixes))
 
 
 def extract_response(response):

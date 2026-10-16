@@ -3,49 +3,16 @@ import decimal
 import re
 
 from .paths import LOG_MAX_FIELD_CHARS, LOG_MAX_LINE_BYTES
+from ..secret_keys import is_secret_key
 
 
-REDACTED_KEYS = {
-  'password',
-  'new_password',
-  'old_password',
-  'pass_token',
-  'token',
-  'new_token',
-  'access_token',
-  'refresh_token',
-  'google_token',
-  'stripe_api_key',
-  'api_key',
-  'secret',
-  'client_secret',
-  'authorization',
-  'cookie',
-  'set_cookie',
-  'id_token',
-}
-# Oltre alle chiavi esatte, si nasconde qualsiasi chiave che contenga uno di
-# questi pezzi (admin_password, confirm_password, webhook_secret, ...) o che
-# finisca per _token: i nomi dei campi li sceglie ogni progetto, e una
-# password con un nome nuovo non deve finire in chiaro nel log.
-REDACTED_KEY_PARTS = ('password', 'secret')
-REDACTED_KEY_SUFFIXES = ('_token',)
 _ORDER_TRACKING_TOKEN = re.compile(r'(/order/(?:public|track)/)[A-Za-z0-9_-]+')
 _ORDER_TRACKING_FRAGMENT = re.compile(r'(/order/track#)[A-Za-z0-9_-]+')
 
 
-def is_redacted_key(key) -> bool:
-  normalized = str(key).strip().lower().replace('-', '_')
-  return (
-    normalized in REDACTED_KEYS
-    or any(part in normalized for part in REDACTED_KEY_PARTS)
-    or normalized.endswith(REDACTED_KEY_SUFFIXES)
-  )
-
-
 def redact(value):
   if isinstance(value, dict):
-    return {key: '***' if is_redacted_key(key) else redact(val) for key, val in value.items()}
+    return {key: '***' if is_secret_key(key) else redact(val) for key, val in value.items()}
   if isinstance(value, list):
     return [redact(item) for item in value]
   if isinstance(value, str):
