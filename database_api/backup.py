@@ -3,7 +3,7 @@ import errno
 import shutil
 import threading
 import subprocess
-from urllib.parse import urlparse, urlsplit
+from urllib.parse import unquote, urlparse, urlsplit
 from datetime import datetime, timedelta
 
 from api.telegram import send_telegram_message
@@ -188,9 +188,9 @@ def mask_db_url(db_url: str) -> str:
     if parts.password is None:
       return db_url
 
-    host = parts.hostname or ''
-    if parts.port:
-      host = f'{host}:{parts.port}'
+    # Host e porta presi cosi' come sono scritti: `hostname` toglierebbe le
+    # parentesi di un IPv6 ([::1]) e metterebbe l'host in minuscolo.
+    host = parts.netloc.rpartition('@')[2]
     user = f'{parts.username}:***@' if parts.username else ':***@'
     return parts._replace(netloc=f'{user}{host}').geturl()
   except Exception:
@@ -213,7 +213,10 @@ def hide_db_password(text: str, db_url: str) -> str:
   except Exception:
     password = None
   if password:
-    text = text.replace(password, '***')
+    # Nell'URL la password puo' essere percent-encoded (p%40ss), ma pg_dump e
+    # libpq la stampano decodificata (p@ss): si nascondono tutte e due.
+    for form in {password, unquote(password)}:
+      text = text.replace(form, '***')
   return text
 
 

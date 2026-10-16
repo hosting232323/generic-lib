@@ -482,7 +482,7 @@ def test_cleanup_passes_folder_and_server_to_delete_file(monkeypatch):
   assert ignore_dev is True
 
 
-def test_the_notification_does_not_carry_the_database_password(monkeypatch, tmp_path):
+def test_the_notification_does_not_carry_the_database_password(monkeypatch):
   """La notifica dice quale database non e' stato salvato, mai con quale password."""
   messages = _collect_telegram(monkeypatch)
   _run_threads_inline(monkeypatch)
@@ -522,7 +522,20 @@ def test_the_password_is_hidden_also_in_the_error_details(monkeypatch, tmp_path)
     ('postgres://user:p%40ss@host:5433/db?sslmode=require', 'postgres://user:***@host:5433/db?sslmode=require'),
     ('postgresql://user@localhost/db', 'postgresql://user@localhost/db'),
     ('postgresql://localhost/db', 'postgresql://localhost/db'),
+    ('postgresql://user:pwd@[::1]:5432/db', 'postgresql://user:***@[::1]:5432/db'),
+    ('postgresql://user:pwd@DB.Interno:5432/db', 'postgresql://user:***@DB.Interno:5432/db'),
   ],
 )
 def test_mask_db_url(db_url, expected):
   assert backup_module.mask_db_url(db_url) == expected
+
+
+def test_hide_db_password_hides_also_the_decoded_form_of_an_encoded_password():
+  """Nell'URL la password e' p%40ss, ma pg_dump puo' stamparla come p@ss."""
+  db_url = 'postgresql://italco:p%40ss@db.interno/italco'
+
+  text = backup_module.hide_db_password('pg_dump: password p@ss rifiutata, URL ' + db_url, db_url)
+
+  assert 'p@ss' not in text
+  assert 'p%40ss' not in text
+  assert 'postgresql://italco:***@db.interno/italco' in text
