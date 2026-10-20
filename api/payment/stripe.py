@@ -30,8 +30,9 @@ def create_stripe_session_(params: PaymentRequest):
         str_value = str(value)[:500]  # Limit value length per Stripe requirements
         validated_metadata[str_key] = str_value
 
+    # Niente payment_method_types: le versioni recenti dell'API Stripe lo rifiutano
+    # e i metodi di pagamento si gestiscono dalla Dashboard (impostazioni pagamenti).
     session_params = {
-      'payment_method_types': ['card'],
       'mode': params.mode,
       'line_items': params.line_items,
       'success_url': params.url['success_url'],
