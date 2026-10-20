@@ -52,7 +52,16 @@ def create_stripe_session_(params: PaymentRequest):
     if params.mode == 'payment':
       session_params['metadata'] = validated_metadata
 
-    session = stripe.checkout.Session.create(**session_params)
+    try:
+      session = stripe.checkout.Session.create(**session_params)
+    except stripe.error.InvalidRequestError as e:
+      # Gli account su versioni recenti dell'API rifiutano payment_method_types: i
+      # metodi di pagamento si gestiscono dalla Dashboard. Gli altri continuano
+      # a pagare solo con carta, come prima.
+      if 'payment_method_types' not in str(e):
+        raise
+      session_params.pop('payment_method_types')
+      session = stripe.checkout.Session.create(**session_params)
 
     return {'status': 'ok', 'checkout_url': session.url, 'session_id': session.id}
   except stripe.error.StripeError as e:
