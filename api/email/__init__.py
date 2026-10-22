@@ -20,9 +20,16 @@ def send_email(
   attachments: list = None,
   signature: dict | str = None,
   tag: str = None,
+  sender: dict = None,
+  reply_to: str = None,
+  headers: dict = None,
 ) -> str | None:
   """
   Invia una mail tramite Resend API.
+
+  `sender` ({'name', 'address'}) sostituisce il mittente di configurazione
+  (EMAIL_SENDER_*) per questa sola mail; `reply_to` e `headers` (es.
+  In-Reply-To, References, List-Unsubscribe) passano com'e' a Resend.
 
   Ritorna l'email_id Resend (str) se la mail è accettata, None se tutti i
   tentativi falliscono (invia anche alert Telegram in quel caso).
@@ -33,7 +40,7 @@ def send_email(
   consegna (italco-be/mailer.py) usano l'email_id restituito come chiave di
   correlazione con i webhook Resend.
   """
-  payload = _build_payload(receiver_email, body, subject, attachments, signature, tag)
+  payload = _build_payload(receiver_email, body, subject, attachments, signature, tag, sender, reply_to, headers)
 
   attempts = max(1, SMTP_MAX_RETRIES)
   backoff = RETRY_BACKOFF
@@ -58,6 +65,9 @@ def _build_payload(
   attachments: list = None,
   signature: dict | str = None,
   tag: str = None,
+  sender: dict = None,
+  reply_to: str = None,
+  headers: dict = None,
 ) -> dict:
   sig_text = ''
   sig_html = ''
@@ -68,8 +78,9 @@ def _build_payload(
     elif isinstance(signature, str):
       sig_text = signature
 
+  sender = sender or EMAIL_SENDER
   payload: dict = {
-    'from': f'{EMAIL_SENDER["name"]} <{EMAIL_SENDER["address"]}>',
+    'from': f'{sender["name"]} <{sender["address"]}>' if sender.get('name') else sender['address'],
     'to': [receiver_email],
     'subject': subject,
   }
@@ -84,6 +95,13 @@ def _build_payload(
 
   if attachments:
     payload['attachments'] = [_build_attachment(a) for a in attachments]
+
+  if reply_to:
+    payload['reply_to'] = reply_to
+
+  headers = {key: value for key, value in (headers or {}).items() if value}
+  if headers:
+    payload['headers'] = headers
 
   if tag:
     # Resend tags: array di {name, value}. Sono key-value alfanumerici.
