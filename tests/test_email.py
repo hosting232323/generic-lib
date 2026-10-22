@@ -93,3 +93,51 @@ def test_build_payload_tags():
 
   payload_none = _build_payload('test@example.com', 'Body', 'Subject', tag=None)
   assert 'tags' not in payload_none
+
+
+@EMAIL_SENDER_PATCH
+def test_build_payload_sender_override():
+  payload = _build_payload(
+    'test@example.com', 'Body', 'Subject', sender={'name': 'Giuseppe', 'address': 'giuseppe@example.org'}
+  )
+  assert payload['from'] == 'Giuseppe <giuseppe@example.org>'
+
+  payload_no_name = _build_payload('test@example.com', 'Body', 'Subject', sender={'name': '', 'address': 'a@b.it'})
+  assert payload_no_name['from'] == 'a@b.it'
+
+
+@EMAIL_SENDER_PATCH
+def test_build_payload_reply_to_and_headers():
+  payload = _build_payload(
+    'test@example.com',
+    'Body',
+    'Subject',
+    reply_to='risposte@example.com',
+    headers={'In-Reply-To': '<a@b>', 'References': None, 'List-Unsubscribe': '<https://x/u>'},
+  )
+  assert payload['reply_to'] == 'risposte@example.com'
+  assert payload['headers'] == {'In-Reply-To': '<a@b>', 'List-Unsubscribe': '<https://x/u>'}
+
+  plain = _build_payload('test@example.com', 'Body', 'Subject')
+  assert 'reply_to' not in plain
+  assert 'headers' not in plain
+
+
+@patch('api.email._deliver')
+@EMAIL_SENDER_PATCH
+def test_send_email_forwards_sender_headers(mock_deliver):
+  mock_deliver.return_value = 'id_1'
+
+  send_email(
+    'test@example.com',
+    'Body',
+    'Subject',
+    sender={'name': 'G', 'address': 'g@example.org'},
+    reply_to='r@example.org',
+    headers={'In-Reply-To': '<a@b>'},
+  )
+
+  payload = mock_deliver.call_args[0][0]
+  assert payload['from'] == 'G <g@example.org>'
+  assert payload['reply_to'] == 'r@example.org'
+  assert payload['headers'] == {'In-Reply-To': '<a@b>'}
