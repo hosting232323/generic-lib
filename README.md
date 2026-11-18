@@ -22,7 +22,17 @@ db_export <database_url>
 
 # Database import
 db_import <database_url> <backup_file>
+
+# Estrae un dump dal repository restic dei backup (cifrato con RESTIC_PASSWORD)
+# snapshot: id restic oppure latest (default). Il file scritto e' in chiaro.
+db_fetch_backup <output_file> [snapshot]
 ```
+
+I backup automatici del database (`db_backup`) finiscono nel repository restic
+`<BACKUP_FOLDER>/db-backup`, via sftp su `BACKUP_SSH_CONFIG` se impostato,
+altrimenti in locale. Servono `RESTIC_PASSWORD`, `BACKUP_FOLDER` e `SERVER_NAME`;
+il repository si crea da solo al primo backup. Retention: `BACKUP_DAYS` giorni
+(`restic forget --keep-within`).
 
 ## Running project options
 

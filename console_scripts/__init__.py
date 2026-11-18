@@ -2,7 +2,8 @@ import os
 import sys
 import requests
 
-from database_api.backup import data_export, data_import
+from api.settings import BACKUP_SSH_CONFIG
+from database_api.backup import data_export, data_import, fetch_backup
 
 
 def db_export():
@@ -11,6 +12,10 @@ def db_export():
 
 def db_import():
   data_import(sys.argv[1], sys.argv[2])
+
+
+def db_fetch_backup():
+  fetch_backup(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else 'latest', bool(BACKUP_SSH_CONFIG))
 
 
 def setup_project():
