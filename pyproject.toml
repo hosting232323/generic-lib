@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "generic_lib"
-version = "4.9.3"
+version = "4.10.0"
 requires-python = ">=3.11"
 authors = [{ name = "GioVanni", email = "colasanto.giovanni.inf@gmail.com" }]
 dependencies = [
@@ -34,6 +34,7 @@ dev = ["pytest", "build", "ruff"]
 [project.scripts]
 db_export = "console_scripts:db_export"
 db_import = "console_scripts:db_import"
+db_fetch_backup = "console_scripts:db_fetch_backup"
 setup_project = "console_scripts:setup_project"
 
 [tool.setuptools]

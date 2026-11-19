@@ -12,6 +12,9 @@ from .local import (
   _list_files_local,
   _folder_backup_local,
   _cleanup_folder_backups_local,
+  _upload_db_dump_local,
+  _cleanup_db_dumps_local,
+  _download_db_dump_local,
 )
 from .server import (
   _upload_file_server,
@@ -19,6 +22,9 @@ from .server import (
   _list_files_server,
   _folder_backup_server,
   _cleanup_folder_backups_server,
+  _upload_db_dump_server,
+  _cleanup_db_dumps_server,
+  _download_db_dump_server,
 )
 
 
@@ -44,6 +50,27 @@ def get_all_filenames(folder, server=None, subfolder=None, ignore_dev=None):
     return _list_files_local(full_path)
   else:
     return _list_files_server(full_path)
+
+
+def upload_db_dump(file_path, repository, filename, server=None):
+  if not server:
+    return _upload_db_dump_local(file_path, repository, filename)
+  else:
+    return _upload_db_dump_server(file_path, repository, filename)
+
+
+def cleanup_db_dumps(repository, server=None):
+  if not server:
+    return _cleanup_db_dumps_local(repository)
+  else:
+    return _cleanup_db_dumps_server(repository)
+
+
+def download_db_dump(repository, filename, output_path, snapshot='latest', server=None):
+  if not server:
+    return _download_db_dump_local(repository, filename, output_path, snapshot)
+  else:
+    return _download_db_dump_server(repository, filename, output_path, snapshot)
 
 
 def folder_backup(folder_to_backup, server=None):
