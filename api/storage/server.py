@@ -144,3 +144,86 @@ def _cleanup_folder_backups_server():
     capture_output=True,
     text=True,
   )
+
+
+@storage_decorator
+def _prepare_db_dump_repository_server(repository):
+  if (
+    subprocess.run(
+      ['restic', '-r', f'sftp:{BACKUP_SSH_CONFIG}:{repository}', 'cat', 'config'],
+      env=set_backup_env(),
+      capture_output=True,
+      text=True,
+    ).returncode
+    != 0
+  ):
+    subprocess.run(
+      ['restic', '-r', f'sftp:{BACKUP_SSH_CONFIG}:{repository}', 'init'],
+      env=set_backup_env(),
+      check=True,
+      capture_output=True,
+      text=True,
+    )
+
+  subprocess.run(
+    ['restic', '-r', f'sftp:{BACKUP_SSH_CONFIG}:{repository}', 'unlock', '--remove-all'],
+    env=set_backup_env(),
+    capture_output=True,
+    text=True,
+  )
+
+
+@storage_decorator
+def _upload_db_dump_server(file_path, repository, filename):
+  _prepare_db_dump_repository_server(repository)
+  with open(file_path, 'rb') as content:
+    subprocess.run(
+      [
+        'restic',
+        '-r',
+        f'sftp:{BACKUP_SSH_CONFIG}:{repository}',
+        'backup',
+        '--stdin',
+        '--stdin-filename',
+        filename,
+        '--host',
+        SERVER_NAME,
+      ],
+      stdin=content,
+      env=set_backup_env(),
+      check=True,
+      capture_output=True,
+      text=True,
+    )
+  return repository
+
+
+@storage_decorator
+def _cleanup_db_dumps_server(repository):
+  subprocess.run(
+    [
+      'restic',
+      '-r',
+      f'sftp:{BACKUP_SSH_CONFIG}:{repository}',
+      'forget',
+      '--keep-within',
+      f'{BACKUP_DAYS}d',
+      '--prune',
+    ],
+    env=set_backup_env(),
+    check=True,
+    capture_output=True,
+    text=True,
+  )
+
+
+@storage_decorator
+def _download_db_dump_server(repository, filename, output_path, snapshot):
+  with open(output_path, 'wb') as output:
+    subprocess.run(
+      ['restic', '-r', f'sftp:{BACKUP_SSH_CONFIG}:{repository}', 'dump', snapshot, f'/{filename}'],
+      stdout=output,
+      env=set_backup_env(),
+      check=True,
+    )
+  return output_path

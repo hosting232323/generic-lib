@@ -4,11 +4,11 @@ import shutil
 import threading
 import subprocess
 from urllib.parse import unquote, urlparse, urlsplit
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from api.telegram import send_telegram_message
-from api.settings import BACKUP_DAYS, BACKUP_FOLDER, POSTGRES_DOCKER_CONTAINER, PROJECT_NAME
-from api.storage import upload_file, get_all_filenames, delete_file
+from api.settings import BACKUP_FOLDER, POSTGRES_DOCKER_CONTAINER, PROJECT_NAME
+from api.storage import upload_db_dump, cleanup_db_dumps, download_db_dump, delete_file
 
 
 PG_DUMP_FLAGS = ['--blobs', '--clean', '-Fc', '--verbose']
@@ -19,6 +19,10 @@ DISK_FULL_MARKERS = ('no space left on device', 'disk quota exceeded', 'quota ex
 BACKUP_FALLBACK_ROOT = '/opt/db-backup-fallback'
 BACKUP_DISK_THRESHOLD = 90
 BACKUP_FALLBACK_FOLDER = os.path.join(BACKUP_FALLBACK_ROOT, PROJECT_NAME)
+# I dump vivono in un repository restic, cifrato con RESTIC_PASSWORD come quello
+# di folder_backup: sulla macchina di backup non resta mai un dump in chiaro.
+DB_BACKUP_REPOSITORY = 'db-backup'
+DB_BACKUP_FILENAME = 'database.dump'
 
 
 class LocalDiskAlmostFullError(Exception):
@@ -94,8 +98,23 @@ def db_backup(db_url: str, server=None):
 
 
 def upload_backup(file_path: str, server=None):
-  with open(file_path, 'rb') as content:
-    upload_file(content, os.path.basename(file_path), BACKUP_FOLDER, server, 'postgres-backup', True)
+  upload_db_dump(file_path, db_backup_repository(), DB_BACKUP_FILENAME, server)
+
+
+def db_backup_repository() -> str:
+  return os.path.join(BACKUP_FOLDER, DB_BACKUP_REPOSITORY)
+
+
+def fetch_backup(output_path: str, snapshot: str = 'latest', server=None):
+  """Estrae un dump dal repository restic, pronto per data_import.
+
+  `snapshot` e' l'id restic (`restic snapshots`) o `latest`. Il file scritto e'
+  in chiaro: va cancellato appena importato.
+  """
+  if not BACKUP_FOLDER:
+    raise ValueError('BACKUP_FOLDER non configurata')
+
+  return download_db_dump(db_backup_repository(), DB_BACKUP_FILENAME, output_path, snapshot, server)
 
 
 def check_local_disk_usage():
@@ -247,13 +266,13 @@ def keep_dump(file_path: str, server=None) -> str:
 
 
 def park_dump(file_path: str, server=None) -> str:
+  """Il ripiego e' anch'esso un repository restic: cifrato come la destinazione."""
   if not server:
-    os.makedirs(BACKUP_FALLBACK_FOLDER, exist_ok=True)
-    return shutil.move(file_path, os.path.join(BACKUP_FALLBACK_FOLDER, os.path.basename(file_path)))
+    repository = os.path.join(BACKUP_FALLBACK_FOLDER, DB_BACKUP_REPOSITORY)
+  else:
+    repository = os.path.join(BACKUP_FALLBACK_ROOT, PROJECT_NAME, DB_BACKUP_REPOSITORY)
 
-  with open(file_path, 'rb') as content:
-    fallback_path = upload_file(content, os.path.basename(file_path), BACKUP_FALLBACK_ROOT, server, PROJECT_NAME, True)
-
+  fallback_path = upload_db_dump(file_path, repository, DB_BACKUP_FILENAME, server)
   os.remove(file_path)
   return fallback_path
 
@@ -275,34 +294,13 @@ def error_details(error: Exception) -> str:
 
 
 def cleanup_old_backups(server=None):
-  """Elimina i dump piu' vecchi di BACKUP_DAYS giorni.
+  """Dimentica gli snapshot piu' vecchi di BACKUP_DAYS giorni e libera lo spazio.
 
-  L'eta' del dump si ricava dal nome del file, non dal filesystem: in modalita'
-  server i path restituiti dal listing vivono sulla macchina di backup e non
-  sono raggiungibili da qui. I dump nascono da data_export come
-  `%y%m%d%H%M%S.dump`, quindi il nome e' l'unica fonte disponibile in entrambe
-  le modalita'. Un nome che non rispetta il formato viene tenuto: meglio un
-  file di troppo che una cancellazione basata su un'ipotesi.
+  `--keep-within` conta i giorni a partire dallo snapshot piu' recente, non da
+  oggi: se i backup si fermano, quelli rimasti non scadono uno dopo l'altro fino
+  a lasciare il repository vuoto.
   """
-  expiration = datetime.now() - timedelta(days=BACKUP_DAYS)
-
-  for file_path in get_all_filenames(BACKUP_FOLDER, server, 'postgres-backup', True):
-    backup_date = parse_backup_date(file_path)
-    if backup_date is None or backup_date > expiration:
-      continue
-
-    delete_file(os.path.basename(file_path), BACKUP_FOLDER, server, os.path.dirname(file_path) or None, True)
-
-
-def parse_backup_date(file_path: str) -> datetime | None:
-  filename = os.path.basename(file_path)
-  if not filename.lower().endswith(BACKUP_EXTENSION):
-    return None
-
-  try:
-    return datetime.strptime(filename[: -len(BACKUP_EXTENSION)], BACKUP_DATE_FORMAT)
-  except ValueError:
-    return None
+  cleanup_db_dumps(db_backup_repository(), server)
 
 
 def _recreate_database(admin_url: str, db_name: str):

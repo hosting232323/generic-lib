@@ -73,3 +73,82 @@ def _cleanup_folder_backups_local():
     capture_output=True,
     text=True,
   )
+
+
+def _prepare_db_dump_repository_local(repository):
+  if (
+    subprocess.run(
+      ['restic', '-r', repository, 'cat', 'config'],
+      env=set_backup_env(),
+      capture_output=True,
+      text=True,
+    ).returncode
+    != 0
+  ):
+    subprocess.run(
+      ['restic', '-r', repository, 'init'],
+      env=set_backup_env(),
+      check=True,
+      capture_output=True,
+      text=True,
+    )
+
+  subprocess.run(
+    ['restic', '-r', repository, 'unlock', '--remove-all'],
+    env=set_backup_env(),
+    capture_output=True,
+    text=True,
+  )
+
+
+def _upload_db_dump_local(file_path, repository, filename):
+  _prepare_db_dump_repository_local(repository)
+  with open(file_path, 'rb') as content:
+    subprocess.run(
+      [
+        'restic',
+        '-r',
+        repository,
+        'backup',
+        '--stdin',
+        '--stdin-filename',
+        filename,
+        '--host',
+        SERVER_NAME,
+      ],
+      stdin=content,
+      env=set_backup_env(),
+      check=True,
+      capture_output=True,
+      text=True,
+    )
+  return repository
+
+
+def _cleanup_db_dumps_local(repository):
+  subprocess.run(
+    [
+      'restic',
+      '-r',
+      repository,
+      'forget',
+      '--keep-within',
+      f'{BACKUP_DAYS}d',
+      '--prune',
+    ],
+    env=set_backup_env(),
+    check=True,
+    capture_output=True,
+    text=True,
+  )
+
+
+def _download_db_dump_local(repository, filename, output_path, snapshot):
+  with open(output_path, 'wb') as output:
+    subprocess.run(
+      ['restic', '-r', repository, 'dump', snapshot, f'/{filename}'],
+      stdout=output,
+      env=set_backup_env(),
+      check=True,
+    )
+  return output_path

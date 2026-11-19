@@ -2,22 +2,10 @@
 
 ## Retention
 
-La regola e' una sola: si cancella un dump quando ha piu' di BACKUP_DAYS
-giorni. Il punto delicato e' da dove si ricava quell'eta'.
-
-Non dal filesystem. Con `server=True` i path che arrivano dal listing sono
-quelli della macchina di backup, raggiungibile solo via ssh: qualsiasi
-os.path.getmtime() su quei path solleverebbe FileNotFoundError, e siccome
-db_backup gira in un thread daemon che intercetta solo CalledProcessError,
-l'errore sparirebbe senza notifica lasciando i dump ad accumularsi.
-
-L'eta' si ricava quindi dal nome del file, che data_export genera come
-`%y%m%d%H%M%S.dump`: e' l'unico dato disponibile in entrambe le modalita' e
-non richiede di toccare il disco. Da qui i casi coperti:
-
-- si cancella solo cio' che e' scaduto, e mai il resto;
-- i path remoti (inesistenti in locale) funzionano come quelli locali;
-- un nome fuori formato o senza estensione .dump si tiene, non si indovina.
+I dump stanno in un repository restic, cifrato con RESTIC_PASSWORD: la
+retention e' `restic forget --keep-within BACKUP_DAYS`, che conta i giorni dallo
+snapshot piu' recente. Qui si controlla solo che parta sul repository giusto;
+i comandi restic sono coperti in test_db_dump_storage.py.
 
 ## Fallback
 
@@ -39,10 +27,11 @@ backup nuovi a riprendere la strada giusta, i vecchi restano nel fallback. Sono
 gia' al sicuro sulla stessa macchina, e riportarli in destinazione a posteriori
 vorrebbe dire trasferimenti e notifiche per un file che nessuno cerca li'.
 
-Quella cartella e' condivisa da tutti i progetti della macchina, ma i dump si
-chiamano solo `%y%m%d%H%M%S.dump`: senza una sottocartella per progetto non ci
-sarebbe modo di sapere da quale database viene il dump che si sta per
-ripristinare.
+Quella cartella e' condivisa da tutti i progetti della macchina, ma ogni dump
+nel repository si chiama sempre `database.dump`: senza una sottocartella per
+progetto non ci sarebbe modo di sapere da quale database viene il dump che si
+sta per ripristinare. Anche il ripiego e' un repository restic: il dump non e'
+mai in chiaro sulla macchina di backup.
 
 ## Soglia sul disco locale
 
@@ -59,79 +48,53 @@ from pathlib import Path
 from collections import namedtuple
 from datetime import datetime, timedelta
 
-from api.settings import BACKUP_DAYS, PROJECT_NAME
+from api.settings import PROJECT_NAME
 from database_api import backup as backup_module
-from database_api.backup import cleanup_old_backups, db_backup, parse_backup_date
+from database_api.backup import cleanup_old_backups, db_backup, fetch_backup
 
 
 def _dump_name(days_ago: float) -> str:
   return f'{(datetime.now() - timedelta(days=days_ago)).strftime("%y%m%d%H%M%S")}.dump'
 
 
-def _collect_deletes(monkeypatch, listed_files):
-  deleted = []
-  monkeypatch.setattr(backup_module, 'get_all_filenames', lambda *args, **kwargs: listed_files)
-  monkeypatch.setattr(backup_module, 'delete_file', lambda filename, *args, **kwargs: deleted.append(filename))
-  return deleted
-
-
-def test_parse_backup_date_reads_the_timestamp_in_the_name():
-  assert parse_backup_date('/backup/prod/postgres-backup/240115103000.dump') == datetime(2024, 1, 15, 10, 30, 0)
-
-
-def test_parse_backup_date_ignores_names_out_of_format():
-  assert parse_backup_date('/backup/prod/postgres-backup/dump-di-prova.dump') is None
-  assert parse_backup_date('/backup/prod/postgres-backup/240115103000.sql') is None
-  assert parse_backup_date('/backup/prod/postgres-backup/240115103000') is None
-
-
-def test_cleanup_deletes_only_expired_dumps(monkeypatch):
-  expired = _dump_name(BACKUP_DAYS + 5)
-  fresh = _dump_name(1)
-  on_the_edge = _dump_name(BACKUP_DAYS - 0.5)
-
-  folder = '/backup/prod/postgres-backup'
-  deleted = _collect_deletes(monkeypatch, [f'{folder}/{expired}', f'{folder}/{fresh}', f'{folder}/{on_the_edge}'])
-
-  cleanup_old_backups()
-
-  assert deleted == [expired]
-
-
-def test_cleanup_works_on_remote_paths_that_do_not_exist_locally(monkeypatch):
-  """Regressione: la retention leggeva l'eta' dal filesystem locale.
-
-  Questi path esistono solo sulla macchina di backup. Se il codice tornasse a
-  interrogare il disco, qui otterrebbe FileNotFoundError invece di cancellare.
-  """
-  expired = _dump_name(BACKUP_DAYS + 1)
-  remote_folder = '/srv/backup-che-non-esiste-qui/prod/postgres-backup'
-  deleted = _collect_deletes(monkeypatch, [f'{remote_folder}/{expired}', f'{remote_folder}/{_dump_name(0)}'])
+def test_cleanup_runs_on_the_db_backup_repository(monkeypatch):
+  captured = []
+  monkeypatch.setattr(backup_module, 'BACKUP_FOLDER', '/srv/backup/italco')
+  monkeypatch.setattr(backup_module, 'cleanup_db_dumps', lambda *args: captured.append(args))
 
   cleanup_old_backups(server=True)
 
-  assert deleted == [expired]
+  assert captured == [(os.path.join('/srv/backup/italco', 'db-backup'), True)]
 
 
-def test_cleanup_keeps_files_it_cannot_date(monkeypatch):
-  deleted = _collect_deletes(
-    monkeypatch,
-    ['/backup/prod/postgres-backup/backup-manuale.dump', '/backup/prod/postgres-backup/note.txt'],
-  )
+def test_fetch_backup_reads_the_dump_from_the_repository(monkeypatch, tmp_path):
+  captured = []
+  monkeypatch.setattr(backup_module, 'BACKUP_FOLDER', '/srv/backup/italco')
+  monkeypatch.setattr(backup_module, 'download_db_dump', lambda *args: captured.append(args) or args[2])
 
-  cleanup_old_backups()
+  output = str(tmp_path / 'restore.dump')
+  assert fetch_backup(output, 'a1b2c3d4', server=True) == output
+  assert captured == [(os.path.join('/srv/backup/italco', 'db-backup'), 'database.dump', output, 'a1b2c3d4', True)]
 
-  assert deleted == []
+
+def test_fetch_backup_without_backup_folder_fails(monkeypatch, tmp_path):
+  monkeypatch.setattr(backup_module, 'BACKUP_FOLDER', '')
+
+  with pytest.raises(ValueError, match='BACKUP_FOLDER'):
+    fetch_backup(str(tmp_path / 'restore.dump'))
 
 
 def _use_fallback_folder(monkeypatch, tmp_path, create=False):
-  """Riproduce il layout di produzione: la cartella del progetto dentro la root."""
+  """Riproduce il layout di produzione: la cartella del progetto dentro la root.
+
+  Restituisce il repository restic di ripiego, dentro la cartella del progetto.
+  """
   fallback = tmp_path / PROJECT_NAME
   if create:
-    fallback.mkdir()
+    (fallback / 'db-backup').mkdir(parents=True)
   monkeypatch.setattr(backup_module, 'BACKUP_FALLBACK_ROOT', str(tmp_path))
   monkeypatch.setattr(backup_module, 'BACKUP_FALLBACK_FOLDER', str(fallback))
-  return fallback
+  return fallback / 'db-backup'
 
 
 def _collect_telegram(monkeypatch):
@@ -142,8 +105,29 @@ def _collect_telegram(monkeypatch):
 
 def _collect_uploads(monkeypatch):
   uploaded = []
-  monkeypatch.setattr(backup_module, 'upload_file', lambda content, filename, *args: uploaded.append(filename))
+  monkeypatch.setattr(
+    backup_module, 'upload_db_dump', lambda file_path, *args: uploaded.append(os.path.basename(file_path))
+  )
   return uploaded
+
+
+def _fake_restic_upload(destination_error=None, destination=None):
+  """Un repository restic finto: il dump finisce in <repository>/<nome del dump>.
+
+  Basta per dire in quale repository e' arrivato, che e' tutto cio' che
+  interessa a db_backup; i comandi restic veri sono in test_db_dump_storage.py.
+  """
+
+  def upload_db_dump(file_path, repository, filename, server=None):
+    target = Path(repository)
+    if destination_error and target == destination:
+      destination_error()
+
+    target.mkdir(parents=True, exist_ok=True)
+    (target / os.path.basename(file_path)).write_bytes(Path(file_path).read_bytes())
+    return str(target)
+
+  return upload_db_dump
 
 
 def _run_threads_inline(monkeypatch):
@@ -165,7 +149,7 @@ def _run_threads_inline(monkeypatch):
 
 def _no_space_error(*args, **kwargs):
   raise subprocess.CalledProcessError(
-    11, 'rsync', stderr='rsync: write failed on "/backup/prod/postgres-backup": No space left on device (28)'
+    1, 'restic', stderr='Fatal: unable to save snapshot: write /backup/db-backup/data/3f: no space left on device'
   )
 
 
@@ -209,23 +193,13 @@ def _use_backup_server(monkeypatch, tmp_path, destination_error=None):
 
   Va chiamata dopo _prepare_backup, di cui sovrascrive la destinazione.
   """
-  destination = tmp_path / 'macchina-di-backup' / 'hdd-esterno' / 'postgres-backup'
-  fallback = tmp_path / 'macchina-di-backup' / 'opt' / PROJECT_NAME
+  destination = tmp_path / 'macchina-di-backup' / 'hdd-esterno' / 'db-backup'
+  fallback = tmp_path / 'macchina-di-backup' / 'opt' / PROJECT_NAME / 'db-backup'
 
   monkeypatch.setattr(backup_module, 'BACKUP_FOLDER', str(destination.parent))
-  monkeypatch.setattr(backup_module, 'BACKUP_FALLBACK_ROOT', str(fallback.parent))
+  monkeypatch.setattr(backup_module, 'BACKUP_FALLBACK_ROOT', str(fallback.parent.parent))
   monkeypatch.setattr(backup_module, 'BACKUP_FALLBACK_FOLDER', str(tmp_path / 'locale' / PROJECT_NAME))
-
-  def upload_file(content, filename, folder, server=None, subfolder=None, ignore_dev=None):
-    target = Path(folder) / subfolder / filename
-    if destination_error and target.parent == destination:
-      destination_error()
-
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(content.read())
-    return str(target)
-
-  monkeypatch.setattr(backup_module, 'upload_file', upload_file)
+  monkeypatch.setattr(backup_module, 'upload_db_dump', _fake_restic_upload(destination_error, destination))
 
   return destination, fallback
 
@@ -252,9 +226,9 @@ def test_disk_full_keeps_the_dump_on_the_backup_server(monkeypatch, tmp_path):
 
   assert len(messages) == 1
   assert 'spazio esaurito' in messages[0]
-  assert 'No space left on device' in messages[0]
+  assert 'no space left on device' in messages[0]
   assert 'macchina di backup' in messages[0]
-  assert str(fallback / dump.name) in messages[0]
+  assert str(fallback) in messages[0]
 
 
 def test_without_the_backup_server_the_dump_is_not_parked_on_the_service_machine(monkeypatch, tmp_path):
@@ -267,7 +241,7 @@ def test_without_the_backup_server_the_dump_is_not_parked_on_the_service_machine
   fallback = _use_fallback_folder(monkeypatch, tmp_path)
   messages = _collect_telegram(monkeypatch)
   dump = _prepare_backup(monkeypatch, tmp_path, _dump_name(0))
-  monkeypatch.setattr(backup_module, 'upload_file', _ssh_down)
+  monkeypatch.setattr(backup_module, 'upload_db_dump', _ssh_down)
 
   db_backup('postgresql://user:pwd@localhost/db', server=True)
 
@@ -287,7 +261,8 @@ def test_notification_arrives_even_when_the_fallback_folder_is_unusable(monkeypa
 
   messages = _collect_telegram(monkeypatch)
   dump = _prepare_backup(monkeypatch, tmp_path, _dump_name(0))
-  monkeypatch.setattr(backup_module, 'upload_file', _no_space_error)
+  destination = Path(backup_module.BACKUP_FOLDER) / 'db-backup'
+  monkeypatch.setattr(backup_module, 'upload_db_dump', _fake_restic_upload(_no_space_error, destination))
 
   db_backup('postgresql://user:pwd@localhost/db')
 
@@ -301,7 +276,7 @@ def test_dump_is_kept_on_any_upload_failure_not_only_disk_full(monkeypatch, tmp_
   dump = _prepare_backup(monkeypatch, tmp_path, _dump_name(0))
 
   def permission_denied():
-    raise subprocess.CalledProcessError(23, 'rsync', stderr='rsync: mkstemp failed: Permission denied (13)')
+    raise subprocess.CalledProcessError(1, 'restic', stderr='Fatal: create repository failed: permission denied')
 
   _, fallback = _use_backup_server(monkeypatch, tmp_path, destination_error=permission_denied)
 
@@ -317,10 +292,12 @@ def test_in_local_mode_the_dump_stays_on_the_machine(monkeypatch, tmp_path):
   fallback = _use_fallback_folder(monkeypatch, tmp_path)
   messages = _collect_telegram(monkeypatch)
   dump = _prepare_backup(monkeypatch, tmp_path, _dump_name(0))
-  monkeypatch.setattr(backup_module, 'upload_file', _no_space_error)
+  destination = Path(backup_module.BACKUP_FOLDER) / 'db-backup'
+  monkeypatch.setattr(backup_module, 'upload_db_dump', _fake_restic_upload(_no_space_error, destination))
 
   db_backup('postgresql://user:pwd@localhost/db')
 
+  assert not dump.exists()
   assert [path.name for path in fallback.iterdir()] == [dump.name]
   assert 'Dump tenuto nella cartella di ripiego' in messages[0]
 
@@ -463,23 +440,8 @@ def test_the_fallback_folder_is_separated_per_project(monkeypatch, tmp_path):
 
   db_backup('postgresql://user:pwd@localhost/db', server=True)
 
-  assert fallback.name == PROJECT_NAME
+  assert fallback.parent.name == PROJECT_NAME
   assert [path.name for path in fallback.iterdir()] == [dump.name]
-
-
-def test_cleanup_passes_folder_and_server_to_delete_file(monkeypatch):
-  captured = []
-  monkeypatch.setattr(backup_module, 'get_all_filenames', lambda *args, **kwargs: [f'/srv/dumps/{_dump_name(90)}'])
-  monkeypatch.setattr(backup_module, 'delete_file', lambda *args, **kwargs: captured.append(args))
-
-  cleanup_old_backups(server=True)
-
-  filename, folder, server, subfolder, ignore_dev = captured[0]
-  assert filename.endswith('.dump')
-  assert folder == backup_module.BACKUP_FOLDER
-  assert server is True
-  assert subfolder == '/srv/dumps'
-  assert ignore_dev is True
 
 
 def test_the_notification_does_not_carry_the_database_password(monkeypatch):
