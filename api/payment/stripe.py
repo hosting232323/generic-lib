@@ -127,7 +127,8 @@ def get_customer_data(filters):
       subscriptions = stripe.Subscription.list(customer=customer.id).data
 
       for subscription in subscriptions:
-        project = subscription.metadata.get('project')
+        # da stripe 15 gli oggetti non sono piu' dict: niente .get()
+        project = subscription.metadata.to_dict().get('project')
 
         if not project:
           continue
@@ -153,7 +154,7 @@ def get_customer_data(filters):
       payments = stripe.PaymentIntent.list(customer=customer.id).data
 
       for payment in payments:
-        project = payment.metadata.get('project')
+        project = payment.metadata.to_dict().get('project')
 
         if not project:
           continue
